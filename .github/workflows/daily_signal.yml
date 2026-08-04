@@ -1,0 +1,62 @@
+name: 每日交易信号
+
+on:
+  schedule:
+    # 工作日 8:30 CST = 0:30 UTC
+    - cron: '30 0 * * 1-5'
+  # 支持手动触发（在GitHub网页上点按钮）
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: 检出代码（含历史状态文件）
+        uses: actions/checkout@v4
+
+      - name: 设置Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 运行信号脚本
+        run: python scripts/daily_signal.py --html
+
+      - name: 提交龙头状态更新
+        run: |
+          git config user.name "DragonSignal Bot"
+          git config user.email "bot@dragon-trading"
+          git add data/dragon_state.json
+          if git diff --quiet && git diff --staged --quiet; then
+            echo "状态无变化，跳过提交"
+          else
+            git commit -m "自动更新龙头状态 $(date +'%Y%m%d')"
+            git push
+          fi
+
+      - name: 上传网页
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./public
+
+      - name: 部署到GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

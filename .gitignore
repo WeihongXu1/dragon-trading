@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# 项目数据（不提交原始数据，只提交状态文件）
+data/store/
+data/backtest_results.xlsx
+data/backtest_summary.csv
+data/daily_pnl.csv
+data/decision_log.csv
+data/trade_records.csv
+data/strategy_evaluation.png
+data/strategy_evaluation_report.csv
+
+# 缓存
+cache/
+
+# IDE
+.idea/
+*.iml
+*.swp
+*.swo
+
+# 系统
+Thumbs.db
+.DS_Store

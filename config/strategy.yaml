@@ -1,0 +1,46 @@
+# ============================================================
+# 龙抬头策略参数配置
+# ============================================================
+
+# 回测参数
+backtest:
+  initial_capital: 100000        # 初始资金
+  start_date: "20260301"         # 开始日期
+  end_date: "20260723"           # 结束日期
+
+# 仓位管理
+position:
+  trial: 0.30                    # 试错期单只仓位
+  main_up: 0.80                  # 主升期仓位
+  trial_max_count: 3             # 试错期最大买入数
+  consolidation_max_count: 2     # 高位震荡期最大买入数
+  max_position_ratio: 0.90       # 总仓位上限
+
+# 股票筛选
+filter:
+  trial_max_price: 20            # 试错期股价上限
+  main_max_price: 30             # 主升期股价上限
+  max_market_cap: 20000000000    # 市值上限（200亿）
+  max_board_time: 103000         # 封板时间上限（10:30:00）
+  baostock_min_turnover: 3.0     # Baostock模式最小换手率
+  akshare_min_turnover: 1.0      # akshare模式最小换手率
+
+# 市场阶段判定
+phase:
+  limit_down_threshold: 15       # 跌停>15只触发退潮
+  dragon_retreat_pct: 0.15       # 龙头回撤>15%触发退潮
+  emotion_freeze_limit_up: 20    # 涨停<20只为情绪冰点
+  sector_effect_min: 3           # 板块效应最少涨停数
+
+# 风险控制
+risk:
+  stop_loss_pct: 0.05            # 止损线
+  loss_streak_threshold: 3       # 连续亏损触发熔断
+  cooldown_days: 3               # 熔断冷却天数
+
+# 交易成本
+broker:
+  commission_rate: 0.00025       # 佣金（万分之2.5）
+  stamp_tax_rate: 0.001          # 印花税（千分之一，仅卖出）
+  transfer_fee_rate: 0.00001     # 过户费（十万分之一）
+  slippage_rate: 0.002           # 滑点（0.2%）
