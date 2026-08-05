@@ -35,8 +35,6 @@ phase:
 # 风险控制
 risk:
   stop_loss_pct: 0.05            # 止损线
-  loss_streak_threshold: 3       # 连续亏损触发熔断
-  cooldown_days: 3               # 熔断冷却天数
 
 # 交易成本
 broker:

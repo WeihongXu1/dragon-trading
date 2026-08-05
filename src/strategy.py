@@ -24,7 +24,7 @@ class DragonState:
     broken: bool = False                # 是否已断板
     break_days: int = 0                 # 断板天数
     peak_price: float = 0.0             # 龙头最高价
-    has_rebounded: bool = False         # 是否已反包过（每个龙头仅限一次）
+    
 
 
 class DragonTracker:
@@ -42,6 +42,7 @@ class DragonTracker:
     TRIAL_MAX_PRICE = 20
     MAIN_MAX_PRICE = 30
     MAX_MARKET_CAP = 20_000_000_000
+    MIN_MARKET_CAP = 3_000_000_000   # 最小市值30亿（低于此不买）
     MIN_BOARD_TIME = 93500   # 封板时间下限（9:35）
     MAX_BOARD_TIME = 103000  # 封板时间上限（10:30）
     MAX_OPEN_CHANGE = 7.0    # 最低价涨幅上限（最低价涨幅>7%不买）
@@ -164,27 +165,9 @@ class DragonTracker:
             else:
                 # 龙头还在涨停
                 if self.dragon.broken:
-                    # 龙头反包涨停
-                    # 只有断板第二天立即反包才能继续主升期
-                    if not self.dragon.has_rebounded and self.dragon.break_days == 1:
-                        # 第一次反包且是断板第二天，重回主升期
-                        print(f"    龙头 {self.dragon.stock} 断板次日反包涨停，重回主升期")
-                        self.dragon.broken = False
-                        self.dragon.break_days =  0
-                        self.dragon.has_rebounded = True  # 标记已反包
-                        # 更新最高价
-                        dragon_price = float(dragon_today.iloc[0].get('price', 0))
-                        if dragon_price > self.dragon.peak_price:
-                            self.dragon.peak_price = dragon_price
-                        self.dragon.streak = int(dragon_today.iloc[0].get('streak', self.dragon.streak))
-                        return '主升期'
-                    else:
-                        # 已反包过或断板超过第二天，继续高位震荡期
-                        if self.dragon.has_rebounded:
-                            print(f"    龙头 {self.dragon.stock} 再次反包，但已反包过，继续高位震荡期")
-                        else:
-                            print(f"    龙头 {self.dragon.stock} 断板第{self.dragon.break_days}天才反包，无法重回主升期，继续高位震荡期")
-                        return '高位震荡期'
+                    # 龙头断板后即使反包也不买回，继续高位震荡期
+                    print(f"    龙头 {self.dragon.stock} 断板后反包，不买回，继续高位震荡期")
+                    return '高位震荡期'
                 else:
                     # 主升期正常追踪，更新最高价
                     dragon_price = float(dragon_today.iloc[0].get('price', 0))
@@ -354,14 +337,14 @@ class DragonTracker:
                 if 'price' in df.columns:
                     df = df[df['price'] < self.MAIN_MAX_PRICE]
                 if 'market_cap' in df.columns:
-                    df = df[(df['market_cap'] == 0) | (df['market_cap'] < self.MAX_MARKET_CAP)]
+                    df = df[(df['market_cap'] == 0) | ((df['market_cap'] >= self.MIN_MARKET_CAP) & (df['market_cap'] < self.MAX_MARKET_CAP))]
                 return df
             return pd.DataFrame()
 
         if 'price' in df.columns:
             df = df[df['price'] < self.TRIAL_MAX_PRICE]
         if 'market_cap' in df.columns:
-            df = df[(df['market_cap'] == 0) | (df['market_cap'] < self.MAX_MARKET_CAP)]
+            df = df[(df['market_cap'] == 0) | ((df['market_cap'] >= self.MIN_MARKET_CAP) & (df['market_cap'] < self.MAX_MARKET_CAP))]
         if 'first_board_time_int' in df.columns and not is_baostock:
             df = df[df['first_board_time_int'] >= self.MIN_BOARD_TIME]
             df = df[df['first_board_time_int'] <= self.MAX_BOARD_TIME]
@@ -422,6 +405,12 @@ class DragonTracker:
             # 过滤股价
             if 'price' in stock.columns:
                 if stock.iloc[0]['price'] >= self.MAIN_MAX_PRICE:
+                    return pd.DataFrame()
+
+            # 过滤市值（低于30亿不买，高于200亿不买）
+            if 'market_cap' in stock.columns:
+                market_cap = stock.iloc[0]['market_cap']
+                if market_cap > 0 and (market_cap < self.MIN_MARKET_CAP or market_cap >= self.MAX_MARKET_CAP):
                     return pd.DataFrame()
 
             # 可买

@@ -11,13 +11,14 @@ import os
 import sys
 from datetime import datetime, timedelta
 from typing import List, Dict
+from collections import Counter
 
 import pandas as pd
 import numpy as np
 
 from src.data import DataFetcher
 from src.strategy import DragonTracker
-from src.broker import Broker, LossTracker
+from src.broker import Broker
 
 
 class BacktestEngine:
@@ -32,7 +33,6 @@ class BacktestEngine:
         self.fetcher = DataFetcher()
         self.tracker = DragonTracker()
         self.broker = Broker(initial_capital)
-        self.loss_tracker = LossTracker()
 
         # 结果记录
         self.summary: Dict = {}
@@ -99,13 +99,6 @@ class BacktestEngine:
         for date in trading_dates:
             try:
                 print(f"\n处理日期：{date}")
-
-                # 熔断检查
-                if self.loss_tracker.tick_cooldown():
-                    cd = self.loss_tracker.cooldown
-                    print(f"  熔断冷却期，剩余{cd}天")
-                    self.prev_market_stats = None
-                    continue
 
                 # 获取市场数据
                 market_stats = self.fetcher.get_market_stats(date)
@@ -278,7 +271,7 @@ class BacktestEngine:
                     sell_list = self.broker.check_sell(zt_df)
                     if sell_list:
                         sell_prices = self.broker.get_sell_prices(sell_list, self.fetcher, date)
-                        self.broker.execute_sell(date, sell_list, sell_prices, phase, self.loss_tracker)
+                        self.broker.execute_sell(date, sell_list, sell_prices, phase)
                         print(f"  卖出{len(sell_list)}只股票")
 
                 if self.broker.positions:
@@ -300,13 +293,6 @@ class BacktestEngine:
                 # 退潮期不买入
                 if phase == '退潮期':
                     self.log_decision(date, phase, False, '退潮期强制空仓', len(self.broker.positions))
-                    self.prev_market_stats = market_stats
-                    continue
-
-                # 熔断检查
-                if self.loss_tracker.is_fused():
-                    print(f"  触发熔断，强制空仓{self.loss_tracker.COOLDOWN_DAYS}天")
-                    self.log_decision(date, phase, False, f'触发熔断，强制空仓{self.loss_tracker.COOLDOWN_DAYS}天', len(self.broker.positions))
                     self.prev_market_stats = market_stats
                     continue
 
@@ -416,7 +402,7 @@ class BacktestEngine:
             for s in force_sell:
                 if s['code'] not in sell_prices or sell_prices[s['code']] == s['buy_price']:
                     sell_prices[s['code']] = self._get_last_price(s['code'], date) or s['buy_price']
-            self.broker.execute_sell(date, force_sell, sell_prices, '退潮期', self.loss_tracker)
+            self.broker.execute_sell(date, force_sell, sell_prices, '退潮期')
             print(f"  退潮期卖出{len(force_sell)}只股票")
         if hold_list:
             print(f"  退潮期保留涨停股：{', '.join(hold_list)}")
@@ -489,6 +475,29 @@ class BacktestEngine:
             print(f"胜率：{win_rate:.2f}%")
             print(f"平均盈亏：{avg_profit:,.2f}元")
             print(f"平均收益率：{avg_profit_pct:.2f}%")
+
+        # ========== 交易日统计表 ==========
+        if self.decision_log:
+            print(f"\n交易日统计：")
+            print(f"{'='*80}")
+            total_days = len(self.decision_log)
+            buy_days = [d for d in self.decision_log if d['是否买入'] == '是']
+            no_buy_days = [d for d in self.decision_log if d['是否买入'] == '否']
+            buy_count = len(buy_days)
+            no_buy_count = len(no_buy_days)
+
+            print(f"  总交易日：{total_days}天")
+            print(f"  出手天数：{buy_count}天 ({buy_count/total_days*100:.1f}%)")
+            print(f"  空仓天数：{no_buy_count}天 ({no_buy_count/total_days*100:.1f}%)")
+
+            # 空仓原因统计
+            if no_buy_days:
+                reason_counter = Counter(d['不买入原因'] for d in no_buy_days)
+                print(f"\n  空仓原因分布：")
+                print(f"  {'原因':<20} {'天数':>5} {'占比':>8}")
+                print(f"  {'-'*35}")
+                for reason, count in reason_counter.most_common():
+                    print(f"  {reason:<20} {count:>5}天 {count/no_buy_count*100:>7.1f}%")
 
         # 保存汇总结果
         self.summary = {

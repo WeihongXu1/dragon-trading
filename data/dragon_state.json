@@ -5,10 +5,9 @@
     "sector": null,
     "broken": false,
     "break_days": 0,
-    "peak_price": 0.0,
-    "has_rebounded": false
+    "peak_price": 0.0
   },
   "current_phase": "低位试错期",
   "dragon_candidates": [],
-  "last_update": "20260804"
+  "last_update": "20260805"
 }

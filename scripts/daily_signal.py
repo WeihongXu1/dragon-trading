@@ -58,8 +58,7 @@ def load_tracker() -> DragonTracker:
             sector=ds.get('sector'),
             broken=ds.get('broken', False),
             break_days=ds.get('break_days', 0),
-            peak_price=ds.get('peak_price', 0.0),
-            has_rebounded=ds.get('has_rebounded', False)
+            peak_price=ds.get('peak_price', 0.0)
         )
         tracker.current_phase = state.get('current_phase', '低位试错期')
         tracker.dragon_candidates = state.get('dragon_candidates', [])
@@ -82,7 +81,6 @@ def save_tracker(tracker: DragonTracker):
                 'broken': tracker.dragon.broken,
                 'break_days': tracker.dragon.break_days,
                 'peak_price': tracker.dragon.peak_price,
-                'has_rebounded': tracker.dragon.has_rebounded,
             },
             'current_phase': tracker.current_phase,
             'dragon_candidates': tracker.dragon_candidates,
@@ -512,12 +510,37 @@ body {{
         print(f"[WARN] 生成网页失败: {e}")
 
 
+def pushplus_notify(token: str, signal_text: str, phase: str, advice: str, url: str = ''):
+    """通过 PushPlus 推送消息到微信"""
+    content = f'''【龙抬头交易信号】{signal_text}
+当前阶段：{phase}
+操作建议：{advice}
+{"详情：" + url if url else ""}'''
+    payload = {
+        'token': token,
+        'title': f'🐉 龙抬头交易信号 - {signal_text}',
+        'content': content,
+        'template': 'txt',
+    }
+    try:
+        import requests
+        r = requests.post('https://www.pushplus.plus/send', json=payload, timeout=10)
+        if r.status_code == 200:
+            print(f"[OK] 微信推送成功")
+        else:
+            print(f"[WARN] 微信推送失败: {r.text}")
+    except Exception as e:
+        print(f"[WARN] 微信推送异常: {e}")
+
+
 def main():
     parser = argparse.ArgumentParser(description='龙抬头每日交易信号灯')
     parser.add_argument('--date', type=str, default='',
                         help='T日日期 YYYYMMDD（默认今天）')
     parser.add_argument('--html', action='store_true',
                         help='同时生成手机端网页')
+    parser.add_argument('--pushplus-token', type=str, default='',
+                        help='PushPlus 推送token')
     args = parser.parse_args()
 
     today = args.date or datetime.now().strftime('%Y%m%d')
@@ -555,6 +578,30 @@ def main():
     # ── 生成网页（如果指定了 --html） ──
     if args.html:
         generate_html(tracker, market_stats, today, prev_date, fetcher)
+
+    # ── 微信推送（如果指定了 token） ──
+    if args.pushplus_token:
+        # 获取信号文本
+        phase = tracker.current_phase
+        dragon = tracker.dragon
+        limit_down = market_stats.get('limit_down_count', 0)
+        if phase == '退潮期':
+            signal_text = '🔴不可交易'
+            advice = '关软件，今天不看盘！'
+        elif phase == '高位震荡期' and dragon.break_days == 1:
+            signal_text = '🔴不可交易'
+            advice = '管住手，今天不买！'
+        elif phase == '主升期':
+            signal_text = '🟢可交易'
+            advice = '持有龙头不动，不新开仓'
+        elif phase == '高位震荡期':
+            signal_text = '🟡谨慎交易'
+            advice = '可做一进二，仓位50%，最多2只'
+        else:
+            signal_text = '🟡谨慎交易'
+            advice = '可试错二板股，仓位50%，最多2只'
+        page_url = 'https://weihongxu1.github.io/dragon-trading/' if args.html else ''
+        pushplus_notify(args.pushplus_token, signal_text, phase, advice, page_url)
 
 
 if __name__ == '__main__':

@@ -128,12 +128,7 @@ class Broker:
         return sell_list
 
     def execute_sell(self, date: str, sell_list: List[Dict], sell_prices: Dict[str, float],
-                     phase: str, loss_streak_tracker):
-        """执行卖出
-        Args:
-            sell_prices: {code: sell_price} 中间价字典
-            loss_streak_tracker: 用于更新连续亏损计数的对象，需要有 add_result(profit) 方法
-        """
+                     phase: str):
         for sell_info in sell_list:
             stock_code = sell_info['code']
             sell_price = sell_prices.get(stock_code, sell_info['buy_price'])
@@ -165,7 +160,6 @@ class Broker:
             })
 
             self.capital += actual_sell_amount
-            loss_streak_tracker.add_result(actual_profit)
 
             # 记录每日盈亏
             self.daily_pnl.append({
@@ -213,34 +207,3 @@ class Broker:
         return list(self.positions.keys())
 
 
-class LossTracker:
-    """熔断/连续亏损追踪"""
-
-    LOSS_THRESHOLD = 3
-    COOLDOWN_DAYS = 3
-
-    def __init__(self):
-        self.streak = 0
-        self.cooldown = 0
-
-    def add_result(self, profit: float):
-        """记录一笔交易盈亏"""
-        if profit < 0:
-            self.streak += 1
-        else:
-            self.streak = 0
-
-    def is_fused(self) -> bool:
-        """是否触发熔断"""
-        if self.streak >= self.LOSS_THRESHOLD:
-            self.cooldown = self.COOLDOWN_DAYS
-            self.streak = 0
-            return True
-        return False
-
-    def tick_cooldown(self) -> bool:
-        """冷却期倒计时，返回是否仍在冷却中"""
-        if self.cooldown > 0:
-            self.cooldown -= 1
-            return self.cooldown > 0
-        return False

@@ -16,9 +16,38 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+from matplotlib.font_manager import FontProperties
 from datetime import datetime, timedelta
 import os
 from typing import Dict, List, Tuple
+
+
+# ========================
+# 中文字体配置（Windows兼容）
+# ========================
+def _setup_chinese_font():
+    """设置 matplotlib 中文字体，解决 Windows 下中文乱码"""
+    # 按优先级尝试常用中文字体
+    chinese_fonts = ['SimHei', 'Microsoft YaHei', 'Microsoft YaHei UI', 'SimSun', 'FangSong']
+    for font_name in chinese_fonts:
+        try:
+            FontProperties(family=font_name)
+            plt.rcParams['font.sans-serif'] = [font_name] + plt.rcParams['font.sans-serif']
+            plt.rcParams['axes.unicode_minus'] = False
+            return
+        except Exception:
+            continue
+    # 兜底：尝试通过 font_manager 查找
+    import matplotlib.font_manager as fm
+    for f in fm.fontManager.ttflist:
+        if any(kw in f.name.lower() for kw in ['yahei', 'simhei', 'simsun', 'songti', 'heiti']):
+            plt.rcParams['font.sans-serif'] = [f.name] + plt.rcParams['font.sans-serif']
+            plt.rcParams['axes.unicode_minus'] = False
+            return
+
+
+# 在导入时自动执行
+_setup_chinese_font()
 
 
 class StrategyEvaluator:
