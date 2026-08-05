@@ -99,12 +99,12 @@ def generate_review_html(tracker: DragonTracker, market_stats: dict, review_date
         dragon_zt = zt_df[(zt_df['code'] == tracker.dragon.stock) & (zt_df['board_type'] != '炸板')]
         dragon_today_text = '✅ 涨停' if not dragon_zt.empty else '❌ 未涨停'
 
-    # 买入筛选
+    # 买入筛选（不传fetcher，跳过K线检查，避免API耗时）
     data_source = getattr(fetcher, '_data_source', '') if fetcher else ''
     is_baostock = data_source == 'baostock'
     buy_rows = ''
     if phase not in ('退潮期',) and not (phase == '高位震荡期' and tracker.dragon.break_days == 1):
-        buy_df = tracker.filter_buy_stocks(zt_df, phase, is_baostock, fetcher, review_date)
+        buy_df = tracker.filter_buy_stocks(zt_df, phase, is_baostock, None, '')
         if not buy_df.empty:
             for _, row in buy_df.head(3).iterrows():
                 bt = row.get('board_type', '')
