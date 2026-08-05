@@ -41,7 +41,7 @@ class DragonTracker:
     # 筛选
     TRIAL_MAX_PRICE = 20
     MAIN_MAX_PRICE = 30
-    MAX_MARKET_CAP = 20_000_000_000
+    MAX_MARKET_CAP = 30_000_000_000
     MIN_MARKET_CAP = 3_000_000_000   # 最小市值30亿（低于此不买）
     MIN_BOARD_TIME = 93500   # 封板时间下限（9:35）
     MAX_BOARD_TIME = 103000  # 封板时间上限（10:30）
@@ -286,7 +286,7 @@ class DragonTracker:
     # ========================
 
     def filter_buy_stocks(self, zt_df: pd.DataFrame, phase: str, is_baostock: bool = False,
-                          fetcher=None, date: str = '') -> pd.DataFrame:
+                          fetcher=None, date: str = '', sector_analysis: Dict = None) -> pd.DataFrame:
         """筛选买入股票（所有阶段统一过滤）
 
         Args:
@@ -358,9 +358,20 @@ class DragonTracker:
             print(f"    龙头断板第1天，禁止买入")
             return pd.DataFrame()  # 返回空DataFrame
 
-        # 模拟实盘随机买入（无法预知哪只股会炸板）
-        # 打乱顺序后，涨停股和炸板股混合，买入时有机会选到炸板股
-        df = df.sample(frac=1.0, random_state=None).reset_index(drop=True)
+        # 一进二优先买有板块效应的
+        if phase in ('低位试错期', '高位震荡期') and sector_analysis and 'sector' in df.columns:
+            sector_counts = sector_analysis.get('sector_count', {})
+            if sector_counts:
+                has_effect = df['sector'].map(lambda s: sector_counts.get(s, 0) >= self.SECTOR_EFFECT_MIN)
+                sector_df = df[has_effect].sample(frac=1.0, random_state=None)
+                no_sector_df = df[~has_effect].sample(frac=1.0, random_state=None)
+                df = pd.concat([sector_df, no_sector_df], ignore_index=True)
+                print(f"    一进二候选：有板块效应{len(sector_df)}只，无板块效应{len(no_sector_df)}只")
+            else:
+                df = df.sample(frac=1.0, random_state=None).reset_index(drop=True)
+        else:
+            # 模拟实盘随机买入（无法预知哪只股会炸板）
+            df = df.sample(frac=1.0, random_state=None).reset_index(drop=True)
 
         return df
 

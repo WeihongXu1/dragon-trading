@@ -304,7 +304,7 @@ class BacktestEngine:
                     continue
 
                 # ========== 筛选买入 ==========
-                buy_df = self.tracker.filter_buy_stocks(zt_df, phase, is_baostock, self.fetcher, date)
+                buy_df = self.tracker.filter_buy_stocks(zt_df, phase, is_baostock, self.fetcher, date, market_stats.get('sector_analysis'))
                 if buy_df.empty:
                     print(f"  无符合条件股票（筛选后）")
                     self.log_decision(date, phase, False, '无符合条件股票', len(self.broker.positions))
