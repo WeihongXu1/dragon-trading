@@ -466,17 +466,18 @@ class DataDownloader:
         try:
             # 从K线数据中推算市值
             # 市值 ≈ 成交额 / 换手率
+            # 注意：kline_df 的 code 已是纯数字格式（如 000725），无 sh./sz. 前缀
             latest_kline = kline_df.sort_values('date').groupby('code').last().reset_index()
             for _, row in latest_kline.iterrows():
                 code = str(row['code'])
-                if code.startswith(('sh.6', 'sz.0')):  # Baostock格式
-                    standard_code = code.replace('sh.', '').replace('sz.', '')
+                # 只处理主板股票（60/00开头）
+                if code.startswith('60') or code.startswith('00'):
                     turn = float(row.get('turn', 0))
                     amount = float(row.get('amount', 0))
                     if turn > 0:
                         # 市值 ≈ 成交额 / 换手率
                         market_cap = amount / turn * 100  # 单位：亿元
-                        cap_map[standard_code] = market_cap
+                        cap_map[code] = market_cap
             print(f"  市值信息: {len(cap_map)} 只股票")
         except Exception as e:
             print(f"  [WARN] 计算市值失败: {e}")

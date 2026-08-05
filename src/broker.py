@@ -114,7 +114,7 @@ class Broker:
         sell_list = []
 
         for stock_code, pos in self.positions.items():
-            # 封板涨停 → 继续持有
+            # 封板涨停 → 继续持有（炸板不算，第二天必须卖）
             if not zt_df.empty and 'code' in zt_df.columns:
                 stock_today = zt_df[(zt_df['code'] == stock_code) & (zt_df['board_type'] != '炸板')]
                 if len(stock_today) > 0:

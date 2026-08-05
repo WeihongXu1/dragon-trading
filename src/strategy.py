@@ -204,8 +204,8 @@ class DragonTracker:
         # 1. 找高板股（≥3板，有板块效应）
         high_board_df = zt_df[zt_df['streak'] >= 3].copy()
         if not high_board_df.empty and 'board_type' in high_board_df.columns:
-            # 过滤一字板和炸板
-            high_board_df = high_board_df[~high_board_df['board_type'].str.contains('一字|炸板', na=False)]
+            # 过滤一字板（盘中买不到），炸板也算候选
+            high_board_df = high_board_df[~high_board_df['board_type'].str.contains('一字', na=False)]
             # 过滤换手率
             if 'turnover_rate' in high_board_df.columns:
                 high_board_df = high_board_df[high_board_df['turnover_rate'] >= self.MIN_TURNOVER_RATE]
@@ -232,9 +232,9 @@ class DragonTracker:
         # 2. 找二板股（有板块效应）
         s2_df = zt_df[zt_df['streak'] == 2].copy()
         if not s2_df.empty:
-            # 过滤一字板和炸板
+            # 过滤一字板（盘中买不到），炸板也算候选
             if 'board_type' in s2_df.columns:
-                s2_df = s2_df[~s2_df['board_type'].str.contains('一字|炸板', na=False)]
+                s2_df = s2_df[~s2_df['board_type'].str.contains('一字', na=False)]
             # 过滤换手率
             if 'turnover_rate' in s2_df.columns:
                 s2_df = s2_df[s2_df['turnover_rate'] >= self.MIN_TURNOVER_RATE]
@@ -337,14 +337,14 @@ class DragonTracker:
                 if 'price' in df.columns:
                     df = df[df['price'] < self.MAIN_MAX_PRICE]
                 if 'market_cap' in df.columns:
-                    df = df[(df['market_cap'] == 0) | ((df['market_cap'] >= self.MIN_MARKET_CAP) & (df['market_cap'] < self.MAX_MARKET_CAP))]
+                    df = df[(df['market_cap'] >= self.MIN_MARKET_CAP) & (df['market_cap'] < self.MAX_MARKET_CAP)]
                 return df
             return pd.DataFrame()
 
         if 'price' in df.columns:
             df = df[df['price'] < self.TRIAL_MAX_PRICE]
         if 'market_cap' in df.columns:
-            df = df[(df['market_cap'] == 0) | ((df['market_cap'] >= self.MIN_MARKET_CAP) & (df['market_cap'] < self.MAX_MARKET_CAP))]
+            df = df[(df['market_cap'] >= self.MIN_MARKET_CAP) & (df['market_cap'] < self.MAX_MARKET_CAP)]
         if 'first_board_time_int' in df.columns and not is_baostock:
             df = df[df['first_board_time_int'] >= self.MIN_BOARD_TIME]
             df = df[df['first_board_time_int'] <= self.MAX_BOARD_TIME]
@@ -388,9 +388,9 @@ class DragonTracker:
         if zt_df.empty or 'code' not in zt_df.columns:
             return pd.DataFrame()
 
-        # 检查预选股是否在涨停列表中（非炸板）
+        # 检查预选股是否在涨停列表中（炸板也算，盘中不知道会炸板）
         code = candidate['code']
-        stock = zt_df[(zt_df['code'] == code) & (zt_df['board_type'] != '炸板')]
+        stock = zt_df[zt_df['code'] == code]
 
         if stock.empty:
             return pd.DataFrame()
@@ -418,10 +418,10 @@ class DragonTracker:
                 if stock.iloc[0]['price'] >= self.MAIN_MAX_PRICE:
                     return pd.DataFrame()
 
-            # 过滤市值（低于30亿不买，高于200亿不买）
+            # 过滤市值（低于30亿不买，高于300亿不买；市值缺失/为0也不买）
             if 'market_cap' in stock.columns:
                 market_cap = stock.iloc[0]['market_cap']
-                if market_cap > 0 and (market_cap < self.MIN_MARKET_CAP or market_cap >= self.MAX_MARKET_CAP):
+                if market_cap == 0 or market_cap < self.MIN_MARKET_CAP or market_cap >= self.MAX_MARKET_CAP:
                     return pd.DataFrame()
 
             # 可买
