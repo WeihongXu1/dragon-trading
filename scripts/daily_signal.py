@@ -512,25 +512,7 @@ body {{
 
 def pushplus_notify(token: str, signal_text: str, phase: str, advice: str, url: str = ''):
     """通过 PushPlus 推送消息到微信"""
-    content = f'''【龙抬头交易信号】{signal_text}
-当前阶段：{phase}
-操作建议：{advice}
-{"详情：" + url if url else ""}'''
-    payload = {
-        'token': token,
-        'title': f'🐉 龙抬头交易信号 - {signal_text}',
-        'content': content,
-        'template': 'txt',
-    }
-    try:
-        import requests
-        r = requests.post('https://www.pushplus.plus/send', json=payload, timeout=10)
-        if r.status_code == 200:
-            print(f"[OK] 微信推送成功")
-        else:
-            print(f"[WARN] 微信推送失败: {r.text}")
-    except Exception as e:
-        print(f"[WARN] 微信推送异常: {e}")
+    pass  # 已废弃，不再使用
 
 
 def main():
@@ -539,8 +521,8 @@ def main():
                         help='T日日期 YYYYMMDD（默认今天）')
     parser.add_argument('--html', action='store_true',
                         help='同时生成手机端网页')
-    parser.add_argument('--pushplus-token', type=str, default='',
-                        help='PushPlus 推送token')
+    parser.add_argument('--review', action='store_true',
+                        help='在网页下方追加T-1日交易回顾')
     args = parser.parse_args()
 
     today = args.date or datetime.now().strftime('%Y%m%d')
@@ -579,29 +561,24 @@ def main():
     if args.html:
         generate_html(tracker, market_stats, today, prev_date, fetcher)
 
-    # ── 微信推送（如果指定了 token） ──
-    if args.pushplus_token:
-        # 获取信号文本
-        phase = tracker.current_phase
-        dragon = tracker.dragon
-        limit_down = market_stats.get('limit_down_count', 0)
-        if phase == '退潮期':
-            signal_text = '🔴不可交易'
-            advice = '关软件，今天不看盘！'
-        elif phase == '高位震荡期' and dragon.break_days == 1:
-            signal_text = '🔴不可交易'
-            advice = '管住手，今天不买！'
-        elif phase == '主升期':
-            signal_text = '🟢可交易'
-            advice = '持有龙头不动，不新开仓'
-        elif phase == '高位震荡期':
-            signal_text = '🟡谨慎交易'
-            advice = '可做一进二，仓位50%，最多2只'
+    # ── 网页追加T-1日回顾（如果指定了 --review） ──
+    if args.review and args.html:
+        # 获取T-1日市场数据，追加回顾到网页
+        review_date = prev_date
+        review_stats = fetcher.get_market_stats(review_date)
+        if review_stats and review_stats.get('total_limit_up', 0) > 0:
+            from scripts.daily_review import generate_review_html
+            review_html = generate_review_html(tracker, review_stats, review_date, fetcher, today)
+            html_path = os.path.join(PUBLIC_DIR, 'index.html')
+            if os.path.exists(html_path):
+                with open(html_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                content = content.replace('</body>', review_html + '\n</body>')
+                with open(html_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                print(f"[OK] 交易回顾已追加到网页")
         else:
-            signal_text = '🟡谨慎交易'
-            advice = '可试错二板股，仓位50%，最多2只'
-        page_url = 'https://weihongxu1.github.io/dragon-trading/' if args.html else ''
-        pushplus_notify(args.pushplus_token, signal_text, phase, advice, page_url)
+            print(f"[WARN] 无 {review_date} 数据，跳过回顾")
 
 
 if __name__ == '__main__':

@@ -76,6 +76,87 @@ def get_prev_trading_day(fetcher: DataFetcher, target_date: str, max_try: int = 
     return ''
 
 
+def generate_review_html(tracker: DragonTracker, market_stats: dict, review_date: str, fetcher=None, today: str = '') -> str:
+    """生成交易回顾的HTML代码块（用于追加到信号网页下方）"""
+    zt_df = market_stats.get('zt_df', pd.DataFrame())
+    total_limit_up = market_stats.get('total_limit_up', 0)
+    limit_down = market_stats.get('limit_down_count', 0)
+    max_streak = market_stats.get('max_streak', 0)
+    first_board = market_stats.get('first_board_count', 0)
+    second_board = market_stats.get('second_board_count', 0)
+    third_board = market_stats.get('third_board_count', 0)
+    market_stable = market_stats.get('market_stable', True)
+    sector = market_stats.get('sector_analysis', {})
+
+    phase = tracker.current_phase
+    top_sector = sector.get('top_sector', '') if sector else ''
+    top_sector_count = sector.get('top_sector_count', 0) if sector else 0
+    market_stable_text = '稳定' if market_stable else '⚠️不稳'
+
+    # 龙头今日表现
+    dragon_today_text = ''
+    if tracker.dragon.stock and not zt_df.empty and 'code' in zt_df.columns:
+        dragon_zt = zt_df[(zt_df['code'] == tracker.dragon.stock) & (zt_df['board_type'] != '炸板')]
+        dragon_today_text = '✅ 涨停' if not dragon_zt.empty else '❌ 未涨停'
+
+    # 买入筛选
+    data_source = getattr(fetcher, '_data_source', '') if fetcher else ''
+    is_baostock = data_source == 'baostock'
+    buy_rows = ''
+    if phase not in ('退潮期',) and not (phase == '高位震荡期' and tracker.dragon.break_days == 1):
+        buy_df = tracker.filter_buy_stocks(zt_df, phase, is_baostock, fetcher, review_date)
+        if not buy_df.empty:
+            for _, row in buy_df.head(3).iterrows():
+                bt = row.get('board_type', '')
+                mark = '⚠️' if bt == '炸板' else '✅'
+                buy_rows += f'''
+            <div class="info-row">
+                <span>{row['code']} {row.get('name','')}</span>
+                <span>{mark} {row.get('price',0):.2f} 换手{row.get('turnover_rate',0):.1f}%</span>
+            </div>'''
+
+    # 决策总结
+    decision_text = ''
+    if phase == '退潮期':
+        decision_text = '🔴 空仓观望'
+    elif phase == '主升期':
+        decision_text = f'🟢 持有龙头 {tracker.dragon.stock}'
+    elif phase == '高位震荡期' and tracker.dragon.break_days == 1:
+        decision_text = '🔴 断板当天，不操作'
+    elif buy_rows:
+        decision_text = '🟡 可交易，仓位≤50%'
+    else:
+        decision_text = '🟡 无合适标的，空仓等待'
+
+    return f'''
+<div class="card" style="margin-top: 16px;">
+    <div class="section-title">📖 昨日回顾（{review_date}）</div>
+    <div class="info-row">
+        <span class="info-label">涨停/跌停</span>
+        <span class="info-value">{total_limit_up}/{limit_down}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">首板/二板/三板+</span>
+        <span class="info-value">{first_board}/{second_board}/{third_board}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">最高连板</span>
+        <span class="info-value">{max_streak}板</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">大盘</span>
+        <span class="info-value">{market_stable_text}</span>
+    </div>
+    {f'<div class="info-row"><span class="info-label">最强板块</span><span class="info-value">{top_sector}（{top_sector_count}只）</span></div>' if top_sector else ''}
+    <div class="info-row">
+        <span class="info-label">决策</span>
+        <span class="info-value">{decision_text}</span>
+    </div>
+    {f'<div class="info-row"><span class="info-label">龙头</span><span class="info-value">{tracker.dragon.stock}（{tracker.dragon.streak}板）{dragon_today_text}</span></div>' if tracker.dragon.stock else ''}
+    {buy_rows if buy_rows else ''}
+</div>'''
+
+
 def main():
     parser = argparse.ArgumentParser(description='龙抬头每日交易回顾')
     parser.add_argument('--date', type=str, default='',
