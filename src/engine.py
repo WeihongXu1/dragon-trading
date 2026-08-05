@@ -42,6 +42,7 @@ class BacktestEngine:
 
         # 前一日数据
         self.prev_market_stats = None
+        self.prev_date = None
 
     def log_decision(self, date: str, phase: str, bought: bool, reason: str = '', holdings: int = 0, buy_stock: str = ''):
         """记录决策日志（每个交易日都记录）"""
@@ -110,7 +111,7 @@ class BacktestEngine:
 
                 # ========== 判断市场阶段（用T-1的数据，避免未来函数）==========
                 if self.prev_market_stats:
-                    phase = self.tracker.determine_phase(self.prev_market_stats, self.fetcher, date)
+                    phase = self.tracker.determine_phase(self.prev_market_stats, self.fetcher, self.prev_date)
                 else:
                     # 第一天没有前一天数据，用当天数据
                     phase = self.tracker.determine_phase(market_stats, self.fetcher, date)
@@ -152,6 +153,7 @@ class BacktestEngine:
                 if bought_dragon_today:
                     self.log_decision(date, phase, True, '预选股三板买入成功', 1)
                     self.prev_market_stats = market_stats
+                    self.prev_date = date
                     continue
 
                 # ========== 预选龙头候选 ==========
@@ -227,6 +229,7 @@ class BacktestEngine:
                 if bought_dragon_today:
                     self.log_decision(date, phase, True, '高板股买入成功', 1)
                     self.prev_market_stats = market_stats
+                    self.prev_date = date
                     continue
 
                 # 打印市场信息（用前一天的数据）
@@ -263,8 +266,10 @@ class BacktestEngine:
                     if not self.broker.positions:
                         self.log_decision(date, phase, False, '退潮期强制空仓', 0)
                         self.prev_market_stats = market_stats
+                        self.prev_date = date
                         continue
                     self.prev_market_stats = market_stats
+                    self.prev_date = date
 
                 # ========== 常规卖出检查 ==========
                 if self.broker.positions:
@@ -285,6 +290,7 @@ class BacktestEngine:
                         print(f"  高位震荡期（断板当天），不买入")
                         self.log_decision(date, phase, False, '高位震荡期断板当天', len(self.broker.positions))
                         self.prev_market_stats = market_stats
+                        self.prev_date = date
                         continue
                     else:
                         # 断板第二天及以后，允许买一进二
@@ -294,6 +300,7 @@ class BacktestEngine:
                 if phase == '退潮期':
                     self.log_decision(date, phase, False, '退潮期强制空仓', len(self.broker.positions))
                     self.prev_market_stats = market_stats
+                    self.prev_date = date
                     continue
 
                 # ========== 筛选买入 ==========
@@ -302,6 +309,7 @@ class BacktestEngine:
                     print(f"  无符合条件股票（筛选后）")
                     self.log_decision(date, phase, False, '无符合条件股票', len(self.broker.positions))
                     self.prev_market_stats = market_stats
+                    self.prev_date = date
                     continue
 
                 print(f"  筛选后可买股票: {len(buy_df)}只")
@@ -369,6 +377,7 @@ class BacktestEngine:
                         self.log_decision(date, phase, False, '其他原因', len(self.broker.positions))
 
                 self.prev_market_stats = market_stats
+                self.prev_date = date
 
             except Exception as e:
                 print(f"  处理失败：{e}")
