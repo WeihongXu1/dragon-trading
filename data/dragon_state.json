@@ -1,0 +1,13 @@
+{
+  "dragon": {
+    "stock": null,
+    "streak": 0,
+    "sector": null,
+    "broken": false,
+    "break_days": 0,
+    "peak_price": 0.0
+  },
+  "current_phase": "低位试错期",
+  "dragon_candidates": [],
+  "last_update": "20260806"
+}
