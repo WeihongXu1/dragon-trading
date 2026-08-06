@@ -17,6 +17,8 @@ import numpy as np
 from datetime import datetime, timedelta
 import time
 import os
+import requests
+from bs4 import BeautifulSoup
 from typing import List, Dict, Optional
 
 
@@ -38,6 +40,14 @@ class DataFetcher:
         self._kline_df = None
         self._break_board_df = None
         self._data_source = None
+        self._top_concept_cache = {}  # {date: (top_sectors, sector_stocks)}
+        self._concept_cache = {}  # {code: [sector1, sector2, ...]} 内存持久化，避免重复加载CSV
+
+        # 预索引加速
+        self._limit_up_by_date = {}   # {YYYYMMDD: DataFrame}
+        self._break_board_by_date = {}  # {YYYYMMDD: DataFrame}
+        self._limit_down_by_date = {}  # {YYYYMMDD: int}
+        self._kline_by_code = {}      # {code: DataFrame}
 
         if self.use_csv and os.path.exists(self.store_dir):
             self._load_csv_data()
@@ -95,31 +105,60 @@ class DataFetcher:
         except Exception as e:
             print(f"[WARN] 加载CSV数据失败: {e}")
 
+        # 构建日期索引
+        self._build_date_index()
+
+    def _build_date_index(self):
+        """构建日期/代码索引，加速回测数据访问"""
+        if self._limit_up_df is not None:
+            dates = self._limit_up_df['date'].astype(str).str.replace('-', '')
+            for date_compact, grp in self._limit_up_df.groupby(dates):
+                self._limit_up_by_date[date_compact] = grp.copy()
+
+        if self._break_board_df is not None:
+            dates = self._break_board_df['date'].astype(str).str.replace('-', '')
+            for date_compact, grp in self._break_board_df.groupby(dates):
+                self._break_board_by_date[date_compact] = grp.copy()
+
+        if self._limit_down_df is not None:
+            dates = self._limit_down_df['date'].astype(str).str.replace('-', '')
+            for date_compact, grp in self._limit_down_df.groupby(dates):
+                self._limit_down_by_date[date_compact] = int(grp['limit_down_count'].iloc[0])
+
+        if self._kline_df is not None:
+            for code, grp in self._kline_df.groupby('code'):
+                grp = grp.copy()
+                grp['date_str'] = grp['date'].astype(str).str.replace('-', '')
+                self._kline_by_code[code] = grp
+
+        if self._limit_up_by_date:
+            print(f"  [加速] 涨停数据索引: {len(self._limit_up_by_date)} 个交易日")
+        if self._kline_by_code:
+            print(f"  [加速] K线数据索引: {len(self._kline_by_code)} 只股票")
+
     def get_limit_up_stocks(self, date: str) -> pd.DataFrame:
         """获取涨停股数据"""
         date_compact = date.replace('-', '')
-        if self.use_csv and self._limit_up_df is not None:
-            csv_dates = self._limit_up_df['date'].astype(str).str.replace('-', '')
-            zt_df = self._limit_up_df[csv_dates == date_compact].copy()
+        if self.use_csv and date_compact in self._limit_up_by_date:
+            zt_df = self._limit_up_by_date[date_compact].copy()
             if not zt_df.empty:
-                return zt_df
+                return self._apply_concept_cache(zt_df, date)
 
         try:
             df = ak.stock_zt_pool_em(date=date_compact)
             if df.empty:
                 return pd.DataFrame()
-            return self._clean_limit_up_data(df)
+            return self._apply_concept_cache(self._clean_limit_up_data(df), date)
         except Exception as e:
             print(f"获取涨停股数据失败：{e}")
             return pd.DataFrame()
 
     def get_break_board_stocks(self, date: str) -> pd.DataFrame:
         """获取炸板股数据"""
-        if self._break_board_df is None:
-            return pd.DataFrame()
         date_compact = date.replace('-', '')
-        csv_dates = self._break_board_df['date'].astype(str).str.replace('-', '')
-        return self._break_board_df[csv_dates == date_compact].copy()
+        if date_compact in self._break_board_by_date:
+            return self._apply_concept_cache(self._break_board_by_date[date_compact].copy(), date)
+        return pd.DataFrame()
 
     def _clean_limit_up_data(self, df: pd.DataFrame) -> pd.DataFrame:
         column_mapping = {
@@ -151,6 +190,186 @@ class DataFetcher:
         if 'code' in df.columns:
             df = df[df['code'].str.startswith(('60', '00'))]
         return df
+
+    def _apply_concept_cache(self, df: pd.DataFrame, date: str = '') -> pd.DataFrame:
+        """用概念板块覆盖sector列
+
+        获取涨停最多的概念板块，将涨停股归类到对应概念板块。
+        如果无法获取概念板块数据，保留原始行业分类作为fallback。
+        """
+        if df.empty or 'code' not in df.columns:
+            return df
+
+        # 获取涨停最多的概念板块
+        top_sectors, sector_stocks = self._get_top_concept_sectors(date, df)
+
+        if not top_sectors:
+            return df  # fallback: 保留原始行业分类
+
+        df = df.copy()
+        # 清空原始sector，用概念板块覆盖
+        df['sector'] = ''
+        # 从板块数量少的到多的逐一赋值，确保数量多的板块覆盖数量少的
+        sorted_sectors = sorted(sector_stocks.items(), key=lambda x: len(x[1]))
+        for sector_name, stock_codes in sorted_sectors:
+            df.loc[df['code'].astype(str).isin(stock_codes), 'sector'] = sector_name
+
+        return df
+
+    def _get_top_concept_sectors(self, date: str, zt_df: pd.DataFrame, top_n: int = 5) -> tuple:
+        """获取涨停最多的概念板块
+
+        1. 先尝试东方财富API
+        2. 失败则逐个查询涨停股的概念板块（从同花顺个股页面）
+
+        Args:
+            date: 日期，用于缓存
+            zt_df: 涨停股DataFrame
+            top_n: 返回前N个板块
+
+        Returns:
+            (top_sectors, sector_stocks)
+            top_sectors: [(sector_name, limit_up_count), ...]
+            sector_stocks: {sector_name: [code1, code2, ...]}
+        """
+        if zt_df.empty or 'code' not in zt_df.columns:
+            return [], {}
+
+        # 缓存检查
+        cache_key = f"top_concept_{date}"
+        if cache_key in self._top_concept_cache:
+            return self._top_concept_cache[cache_key]
+
+        zt_codes = list(zt_df['code'].astype(str).unique())
+
+        # 跳过东方财富API（已失效），直接使用同花顺概念板块缓存
+        try:
+            result = self._stock_concept_lookup(zt_codes, top_n)
+            if result[0]:
+                self._top_concept_cache[cache_key] = result
+                return result
+        except Exception as e:
+            print(f"  [WARN] 概念板块查询失败: {e}")
+
+        return [], {}
+
+    def _eastmoney_top_sectors(self, zt_codes: set, top_n: int = 5) -> tuple:
+        """东方财富API获取涨停最多的概念板块"""
+        concept_df = ak.stock_board_concept_name_em()
+        hot_sectors = concept_df.sort_values('上涨家数', ascending=False).head(30)
+
+        sector_stocks = {}
+        for _, row in hot_sectors.iterrows():
+            sector_name = row['板块名称']
+            try:
+                cons_df = ak.stock_board_concept_cons_em(symbol=sector_name)
+                cons_codes = set(cons_df['代码'].astype(str).tolist())
+                overlap = zt_codes & cons_codes
+                if len(overlap) >= 3:
+                    sector_stocks[sector_name] = list(overlap)
+            except Exception:
+                continue
+
+        sorted_sectors = sorted(sector_stocks.items(), key=lambda x: len(x[1]), reverse=True)
+        top_sectors = sorted_sectors[:top_n]
+        result_stocks = {name: codes for name, codes in top_sectors}
+
+        if top_sectors:
+            print(f"  [概念板块] 涨停最多: {', '.join([f'{s}({len(c)}只)' for s, c in top_sectors])}")
+
+        return top_sectors, result_stocks
+
+    def _stock_concept_lookup(self, stock_codes: list, top_n: int = 5) -> tuple:
+        """逐个查询股票的概念板块（从同花顺个股页面）
+
+        对每只股票，访问同花顺个股页面，解析其所属概念板块。
+        结果缓存到CSV避免重复请求。
+        """
+        # 过滤掉非概念板块（沪深港通、融资融券等）
+        BLACKLIST = {'深股通', '沪股通', '融资融券', '标普道琼斯A股', 'MSCI概念',
+                     '同花顺漂亮100', '同花顺中证800', '富时罗素概念', 'MSCI中国',
+                     '沪深300', '中证500', '上证50', '科创50', '创业板综',
+                     '同花顺出海50', '人民币贬值受益', '同花顺特色小镇'}
+        cache_file = os.path.join(self.store_dir, 'stock_concept_cache.csv')
+        # 加载已有缓存（仅首次加载，后续复用内存）
+        if not self._concept_cache:
+            if os.path.exists(cache_file):
+                try:
+                    df = pd.read_csv(cache_file, encoding='utf-8-sig', dtype={'code': str})
+                    for _, row in df.iterrows():
+                        code = str(row['code'])
+                        sectors = str(row.get('concepts', ''))
+                        if sectors:
+                            self._concept_cache[code] = sectors.split('|')
+                    print(f"    [OK] 加载概念缓存: {len(self._concept_cache)}只股票")
+                except Exception:
+                    pass
+
+        concept_cache = self._concept_cache
+
+        # 找出需要查询的股票
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        to_fetch = [c for c in stock_codes if c not in concept_cache]
+        new_cache = {}
+
+        if to_fetch:
+            print(f"    [INFO] 需查询 {len(to_fetch)} 只股票的概念板块...")
+            # 逐个查询（只查主板股）
+            for i, code in enumerate(to_fetch):
+                if not code.startswith(('60', '00')):
+                    continue
+                try:
+                    url = f'http://basic.10jqka.com.cn/{code}/'
+                    r = requests.get(url, headers=headers, timeout=10)
+                    r.encoding = 'gbk'
+                    soup = BeautifulSoup(r.text, 'lxml')
+                    div = soup.find('div', class_='newconcept')
+                    if div:
+                        concepts = [a.get_text(strip=True) for a in div.find_all('a')
+                                   if a.get_text(strip=True) != '详情>>'
+                                   and a.get_text(strip=True) not in BLACKLIST]
+                        if concepts:
+                            concept_cache[code] = concepts
+                            new_cache[code] = concepts
+                except Exception:
+                    pass
+                if (i + 1) % 20 == 0:
+                    print(f"    进度: {i+1}/{len(to_fetch)} 已查询 {len(new_cache)} 只")
+
+            # 保存新查询的缓存
+            if new_cache:
+                new_rows = []
+                for code, sectors in new_cache.items():
+                    new_rows.append({'code': code, 'concepts': '|'.join(sectors)})
+                new_df = pd.DataFrame(new_rows)
+                if os.path.exists(cache_file):
+                    old_df = pd.read_csv(cache_file, encoding='utf-8-sig', dtype={'code': str})
+                    combined = pd.concat([old_df, new_df], ignore_index=True)
+                    combined = combined.drop_duplicates(subset='code', keep='last')
+                else:
+                    combined = new_df
+                combined.to_csv(cache_file, index=False, encoding='utf-8-sig')
+                print(f"    [OK] 缓存已更新: {len(new_cache)} 只新股票")
+
+        # 统计每个概念板块的涨停股数量
+        sector_stocks = {}
+        for code, sectors in concept_cache.items():
+            if code in stock_codes:
+                for sector in sectors:
+                    if sector not in sector_stocks:
+                        sector_stocks[sector] = []
+                    sector_stocks[sector].append(code)
+
+        # 过滤并排序
+        sector_stocks = {s: list(set(c)) for s, c in sector_stocks.items() if len(set(c)) >= 3}
+        sorted_sectors = sorted(sector_stocks.items(), key=lambda x: len(x[1]), reverse=True)
+        top_sectors = sorted_sectors[:top_n]
+        result_stocks = {name: codes for name, codes in top_sectors}
+
+        if top_sectors:
+            print(f"  [概念板块] 涨停最多: {', '.join([f'{s}({len(c)}只)' for s, c in top_sectors])}")
+
+        return top_sectors, result_stocks
 
     def _parse_board_time(self, time_str) -> int:
         if pd.isna(time_str):
@@ -207,11 +426,8 @@ class DataFetcher:
 
     def get_limit_down_count(self, date: str) -> int:
         date_compact = date.replace('-', '')
-        if self.use_csv and self._limit_down_df is not None:
-            csv_dates = self._limit_down_df['date'].astype(str).str.replace('-', '')
-            row = self._limit_down_df[csv_dates == date_compact]
-            if not row.empty:
-                return int(row['limit_down_count'].iloc[0])
+        if date_compact in self._limit_down_by_date:
+            return self._limit_down_by_date[date_compact]
         try:
             df = ak.stock_zt_pool_dtgc_em(date=date_compact)
             if df.empty:
@@ -225,15 +441,13 @@ class DataFetcher:
 
     def get_stock_kline(self, code: str, start_date: str, end_date: str) -> pd.DataFrame:
         code_clean = code.replace('sh.', '').replace('sz.', '').replace('SH', '').replace('SZ', '')
-        if self.use_csv and self._kline_df is not None:
-            kline = self._kline_df[self._kline_df['code'] == code_clean].copy()
+        if code_clean in self._kline_by_code:
+            kline = self._kline_by_code[code_clean]
+            start_clean = start_date.replace('-', '')
+            end_clean = end_date.replace('-', '')
+            kline = kline[(kline['date_str'] >= start_clean) & (kline['date_str'] <= end_clean)]
             if not kline.empty:
-                kline['date_str'] = kline['date'].astype(str).str.replace('-', '')
-                start_clean = start_date.replace('-', '')
-                end_clean = end_date.replace('-', '')
-                kline = kline[(kline['date_str'] >= start_clean) & (kline['date_str'] <= end_clean)]
-                if not kline.empty:
-                    return kline[['date', 'open', 'close', 'high', 'low', 'volume', 'amount']]
+                return kline[['date', 'open', 'close', 'high', 'low', 'volume', 'amount']].copy()
         try:
             df = ak.stock_zh_a_hist(symbol=code_clean, period='daily',
                                     start_date=start_date, end_date=end_date, adjust='qfq')
@@ -248,10 +462,20 @@ class DataFetcher:
     def analyze_sector_limit_up(self, df: pd.DataFrame) -> Dict:
         if df.empty or 'sector' not in df.columns:
             return {}
-        sector_count = df['sector'].value_counts().to_dict()
+        # 过滤掉空板块
+        valid_df = df[df['sector'].notna() & (df['sector'] != '')].copy()
+        if valid_df.empty:
+            return {
+                'sector_count': {},
+                'sector_max_streak': {},
+                'top_sector': '',
+                'top_sector_count': 0,
+                'total_limit_up': len(df)
+            }
+        sector_count = valid_df['sector'].value_counts().to_dict()
         sector_max_streak = {}
-        for sector in df['sector'].unique():
-            sector_df = df[df['sector'] == sector]
+        for sector in valid_df['sector'].unique():
+            sector_df = valid_df[valid_df['sector'] == sector]
             sector_max_streak[sector] = sector_df['streak'].max() if 'streak' in sector_df.columns else 0
         top_sector = max(sector_count.items(), key=lambda x: x[1]) if sector_count else ('', 0)
         return {
@@ -285,3 +509,18 @@ class DataFetcher:
             'sh_change': index_data['sh_change'], 'sz_change': index_data['sz_change'],
             'sector_analysis': sector_analysis, 'zt_df': zt_df
         }
+
+    def precache_concept_sectors(self, stock_codes: list):
+        """预缓存概念板块数据
+
+        批量查询股票的概念板块并缓存，避免回测时逐日查询。
+        Args:
+            stock_codes: 股票代码列表
+        """
+        print(f"\n预缓存概念板块数据（共 {len(stock_codes)} 只股票）...")
+        self._stock_concept_lookup(stock_codes, top_n=5)
+        # 打印缓存统计
+        cache_file = os.path.join(self.store_dir, 'stock_concept_cache.csv')
+        if os.path.exists(cache_file):
+            df = pd.read_csv(cache_file, encoding='utf-8-sig', dtype={'code': str})
+            print(f"[OK] 概念板块缓存完成: {len(df)} 只股票已缓存")

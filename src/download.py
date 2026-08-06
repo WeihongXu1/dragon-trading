@@ -12,6 +12,8 @@
 
 使用方法：
 python download_data.py --start_date 20260701 --end_date 20260723
+python download_data.py --mode baostock --start_date 20250701 --end_date 20260701
+python download_data.py --precache                                    # 仅预缓存概念板块
 
 author: assistant
 version: 20260723
@@ -25,6 +27,9 @@ import os
 import argparse
 import time
 import baostock as bs
+
+# 导入DataFetcher用于概念板块预缓存
+from data import DataFetcher
 
 # pandas 2.0+ 移除了 DataFrame.append()，Baostock 内部仍在使用，需要兼容
 if not hasattr(pd.DataFrame, 'append'):
@@ -386,8 +391,8 @@ class DataDownloader:
 
     def download_stock_info(self, kline_df=None):
         """
-        下载股票基本信息（行业、市值）
-        使用akshare获取，缓存到CSV
+        下载股票基本信息（概念板块、市值）
+        使用同花顺获取概念板块，缓存到CSV
 
         Returns:
             tuple: (sector_map: dict, cap_map: dict)
@@ -435,31 +440,27 @@ class DataDownloader:
             while (rs.error_code == '0') & rs.next():
                 industry_list.append(rs.get_row_data())
 
-            industry_df = pd.DataFrame(industry_list, columns=rs.fields)
-            print(f"  共获取 {len(industry_df)} 条行业分类记录")
+            industry_df = pd.DataFrame(industry_list)
+            if not industry_df.empty:
+                print(f'    Baostock行业分类列名: {list(industry_df.columns)}')
+                print(f'    共 {len(industry_df)} 条记录')
 
-            # 只保留主板股票且有行业分类的
-            for _, row in industry_df.iterrows():
-                code = str(row['code'])
-                industry = str(row.get('industry', '')).strip()
-                if not industry:  # 跳过没有行业分类的股票
-                    continue
-                if code.startswith(('sh.6', 'sz.0')):  # Baostock格式：sh.600000, sz.000001
-                    standard_code = code.replace('sh.', '').replace('sz.', '')
-                    if standard_code.startswith(('60', '00')):
-                        sector_map[standard_code] = industry
+                # 兼容不同版本的列名
+                code_col = 'code' if 'code' in industry_df.columns else industry_df.columns[0]
+                industry_col = 'industry' if 'industry' in industry_df.columns else industry_df.columns[1]
 
-            bs.logout()
-            print(f"  行业映射: {len(sector_map)} 只股票")
-
-            # 缓存行业映射
-            sector_df = pd.DataFrame([
-                {'code': k, 'sector': v} for k, v in sector_map.items()
-            ])
-            sector_df.to_csv(os.path.join(self.store_dir, 'sector_map.csv'), index=False, encoding='utf-8-sig')
-            print(f"  行业映射已保存: {len(sector_map)} 只股票")
+                for _, row in industry_df.iterrows():
+                    code = str(row[code_col]).replace('sh.', '').replace('sz.', '')
+                    industry = str(row[industry_col])
+                    if code.startswith(('60', '00')):
+                        sector_map[code] = industry
+                print(f"    已提取 {len(sector_map)} 只主板股票的行业信息")
+            else:
+                print(f"    [WARN] Baostock行业分类数据为空")
         except Exception as e:
-            print(f"  [WARN] 获取行业分类失败: {e}")
+            print(f"    [WARN] 获取行业分类失败: {e}")
+        finally:
+            bs.logout()
 
         # 2. 获取市值（从K线数据推算）
         print("  计算市值信息（从K线数据）...")
@@ -584,10 +585,10 @@ class DataDownloader:
             axis=1
         )
 
-        # 获取行业和市值信息
+        # 获取概念板块和市值信息
         sector_map, cap_map = self.download_stock_info(kline_df)
 
-        print(f"  行业映射: {len(sector_map)} 只股票")
+        print(f"  概念板块映射: {len(sector_map)} 只股票")
         print(f"  市值数据: {len(cap_map)} 只股票")
 
         # 构建输出DataFrame（与akshare涨停池格式对齐）
@@ -687,7 +688,7 @@ class DataDownloader:
             print("[WARN] 未找到任何炸板记录")
             return
 
-        # 获取行业和市值信息
+        # 获取概念板块和市值信息
         sector_map, cap_map = self.download_stock_info(kline_df)
 
         # 计算连板数（基于涨停数据，炸板当天也算连板延续）
@@ -741,6 +742,40 @@ class DataDownloader:
         print(f"\n[OK] 炸板数据已生成: {output_file}")
         print(f"  共 {len(result_df)} 条记录")
 
+    def precache_concept_sectors(self):
+        """预缓存概念板块数据
+
+        扫描所有涨停CSV文件，提取唯一股票代码，
+        批量查询概念板块并缓存，避免回测时逐日查询。
+        """
+        print("\n预缓存概念板块数据...")
+        print("=" * 80)
+
+        # 扫描所有涨停CSV
+        all_codes = set()
+        csv_files = [f for f in os.listdir(self.store_dir)
+                     if f.startswith('limit_up_') and f.endswith('.csv')]
+        for fname in csv_files:
+            fpath = os.path.join(self.store_dir, fname)
+            try:
+                df = pd.read_csv(fpath, encoding='utf-8-sig', dtype={'code': str})
+                codes = df['code'].dropna().unique()
+                all_codes.update(codes)
+            except Exception as e:
+                print(f"  [WARN] 读取 {fname} 失败: {e}")
+
+        # 只保留主板股票
+        all_codes = [c for c in all_codes if str(c).startswith(('60', '00'))]
+        print(f"  从 {len(csv_files)} 个CSV提取 {len(all_codes)} 只主板股票")
+
+        if not all_codes:
+            print("[WARN] 未找到任何股票代码")
+            return
+
+        # 用DataFetcher查询概念板块
+        fetcher = DataFetcher(store_dir=self.store_dir, use_csv=False)
+        fetcher.precache_concept_sectors(all_codes)
+
 
 def main():
     """主函数"""
@@ -750,14 +785,22 @@ def main():
     parser.add_argument('--store_dir', type=str,
                        default='e:\\Quantitative_trading\\DragonTrading\\data\\store',
                        help='数据存储目录')
-    parser.add_argument('--mode', type=str, default='baostock',
+    parser.add_argument('--mode', type=str, default=None,
                        choices=['akshare', 'baostock', 'both'],
                        help='数据源模式: akshare(近1月涨停池), baostock(K线计算涨停), both(全部下载)')
+    parser.add_argument('--precache', action='store_true',
+                       help='预缓存概念板块数据（可单独使用，也可搭配下载）')
 
     args = parser.parse_args()
 
     downloader = DataDownloader(args.store_dir)
 
+    # 预缓存概念板块（单独使用）
+    if args.precache and not args.mode:
+        downloader.precache_concept_sectors()
+        return
+
+    # 下载数据
     if args.mode == 'baostock':
         # Baostock模式：下载K线 → 计算涨停
         downloader.download_kline_baostock(args.start_date, args.end_date)
@@ -770,6 +813,10 @@ def main():
     else:
         # akshare模式（原有逻辑）
         downloader.download_all_dates(args.start_date, args.end_date)
+
+    # 预缓存概念板块
+    if args.precache:
+        downloader.precache_concept_sectors()
 
 
 if __name__ == '__main__':
