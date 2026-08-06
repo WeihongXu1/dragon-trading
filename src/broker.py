@@ -43,8 +43,14 @@ class Broker:
         """根据阶段返回仓位比例"""
         return self.MAIN_PCT if phase == '主升期' else self.TRIAL_PCT
 
-    def execute_buy(self, date: str, stock_info: Dict, phase: str) -> bool:
-        """执行买入，返回是否成功"""
+    def execute_buy(self, date: str, stock_info: Dict, phase: str,
+                     skip_position_limit: bool = False, custom_pct: float = None) -> bool:
+        """执行买入，返回是否成功
+
+        Args:
+            skip_position_limit: 跳过仓位数量限制（用于一进二多只候选同时买入）
+            custom_pct: 自定义仓位比例（覆盖阶段默认仓位）
+        """
         stock_code = stock_info['code']
         stock_name = stock_info.get('name', '')
         price = stock_info.get('price', 0)
@@ -52,15 +58,16 @@ class Broker:
         if price <= 0:
             return False
 
-        position_pct = self.get_position_pct(phase)
-        buy_amount = self.capital * position_pct
+        # 仓位限制（预选确认多只买入时跳过）
+        if not skip_position_limit:
+            current_holdings = len(self.positions)
+            if phase in ('低位试错期', '高位震荡期') and current_holdings >= 2:
+                return False
+            if phase == '主升期' and current_holdings >= 1:
+                return False
 
-        # 仓位限制：试错期最多2只，主升期只能1只
-        current_holdings = len(self.positions)
-        if phase in ('低位试错期', '高位震荡期') and current_holdings >= 2:
-            return False
-        if phase == '主升期' and current_holdings >= 1:
-            return False
+        position_pct = custom_pct if custom_pct is not None else self.get_position_pct(phase)
+        buy_amount = self.capital * position_pct
 
         buy_shares = int(buy_amount / price / 100) * 100
 
