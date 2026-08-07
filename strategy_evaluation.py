@@ -64,6 +64,7 @@ class StrategyEvaluator:
         self.trade_records = None
         self.daily_pnl = None
         self.summary = None
+        self.decision_log = None
         self.cumulative_returns = None
         self.monthly_returns = None
 
@@ -97,6 +98,15 @@ class StrategyEvaluator:
         else:
             print(f"  [WARN] 未找到汇总结果文件: {summary_file}")
             self.summary = pd.DataFrame()
+
+        # 加载决策日志（含空仓原因）
+        decision_file = os.path.join(self.data_dir, 'decision_log.csv')
+        if os.path.exists(decision_file):
+            self.decision_log = pd.read_csv(decision_file, encoding='utf-8-sig')
+            print(f"  [OK] 决策日志: {len(self.decision_log)}条")
+        else:
+            print(f"  [WARN] 未找到决策日志文件: {decision_file}")
+            self.decision_log = pd.DataFrame()
 
         # 计算累计收益和月度收益
         if not self.daily_pnl.empty:
@@ -425,6 +435,66 @@ class StrategyEvaluator:
         return metrics
 
     # ========================
+    # 空仓统计
+    # ========================
+
+    def calculate_idle_metrics(self) -> Dict:
+        """计算空仓天数/空仓原因/空仓日占比"""
+        metrics = {}
+
+        if self.decision_log is None or self.decision_log.empty:
+            return metrics
+
+        total_days = len(self.decision_log)
+        metrics['总交易日数'] = total_days
+
+        # 出手天数（有买入）
+        buy_days = self.decision_log[self.decision_log['是否买入'] == '是']
+        buy_count = len(buy_days)
+        metrics['出手天数'] = buy_count
+        metrics['出手率(%)'] = round(buy_count / total_days * 100, 2) if total_days > 0 else 0
+
+        # 空仓天数（未买入）
+        no_buy_days = self.decision_log[self.decision_log['是否买入'] == '否']
+        no_buy_count = len(no_buy_days)
+        metrics['空仓天数'] = no_buy_count
+        metrics['空仓率(%)'] = round(no_buy_count / total_days * 100, 2) if total_days > 0 else 0
+
+        # 空仓原因分布
+        if no_buy_count > 0 and '不买入原因' in no_buy_days.columns:
+            reason_counter = no_buy_days['不买入原因'].value_counts()
+            reason_details = {}
+            for reason, count in reason_counter.items():
+                reason_str = str(reason) if reason and str(reason).strip() else '未记录原因'
+                reason_details[reason_str] = {
+                    '天数': int(count),
+                    '占空仓日比例(%)': round(count / no_buy_count * 100, 2),
+                    '占总交易日比例(%)': round(count / total_days * 100, 2),
+                }
+            metrics['空仓原因分布'] = reason_details
+
+        return metrics
+
+    def print_idle_metrics(self, idle_metrics: Dict):
+        """打印空仓统计"""
+        if not idle_metrics:
+            return
+
+        print(f"\n【空仓统计】")
+        print("-" * 80)
+        print(f"  总交易日: {idle_metrics['总交易日数']}天")
+        print(f"  出手天数: {idle_metrics['出手天数']}天 ({idle_metrics['出手率(%)']}%)")
+        print(f"  空仓天数: {idle_metrics['空仓天数']}天 ({idle_metrics['空仓率(%)']}%)")
+
+        reason_details = idle_metrics.get('空仓原因分布', {})
+        if reason_details:
+            print(f"\n  ▶ 空仓原因分布")
+            print(f"  {'原因':<20} {'天数':>5} {'占空仓比例':>10} {'占总交易日比例':>12}")
+            print(f"  {'-'*50}")
+            for reason, info in sorted(reason_details.items(), key=lambda x: x[1]['天数'], reverse=True):
+                print(f"  {reason:<20} {info['天数']:>5}天 {info['占空仓日比例(%)']:>8.1f}% {info['占总交易日比例(%)']:>10.1f}%")
+
+    # ========================
     # 亏损归因分析
     # ========================
 
@@ -697,6 +767,15 @@ class StrategyEvaluator:
             else:
                 print(f"  {key}: {value}")
         all_metrics.update(other_metrics)
+
+        # 空仓统计
+        print("\n" + "=" * 80)
+        print("空仓统计")
+        print("=" * 80)
+        idle_metrics = self.calculate_idle_metrics()
+        self.print_idle_metrics(idle_metrics)
+        if idle_metrics:
+            all_metrics['空仓统计'] = idle_metrics
 
         # 亏损归因分析
         print("\n" + "=" * 80)
