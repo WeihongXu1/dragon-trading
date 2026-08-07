@@ -282,6 +282,100 @@ class DragonTracker:
         return None
 
     # ========================
+    # 统一策略入口（回测和每日信号共用）
+    # ========================
+
+    def process_day(self, prev_market_stats: Dict, today_zt_df: pd.DataFrame,
+                    fetcher, prev_date: str, sector_analysis: Dict = None) -> str:
+        """统一的一天处理流程
+
+        回测和每日信号共用此方法，保证阶段判定、龙头确认、预选逻辑完全一致。
+
+        Args:
+            prev_market_stats: 前一日市场数据（用于阶段判定，避免未来函数）
+            today_zt_df: 当日涨停数据（用于预选确认）
+            fetcher: 数据获取器
+            prev_date: 前一日日期
+            sector_analysis: 当日板块分析（与 today_zt_df 同一天，用于预选）
+
+        Returns:
+            phase: 当前市场阶段
+        """
+        # 标记位：告知调用方是否需要买入龙头
+        self.dragon_confirmed_today = False
+
+        # 如果 sector_analysis 未传，从 prev_market_stats 取
+        if sector_analysis is None:
+            sector_analysis = prev_market_stats.get('sector_analysis', {})
+
+        # ====== 1. 确认预选股（昨天预选，今天检查是否三板） ======
+        if self.dragon_candidates:
+            confirmed = None
+            for candidate in self.dragon_candidates:
+                stock_df = self.filter_dragon_candidate(today_zt_df, candidate)
+                if not stock_df.empty:
+                    confirmed = candidate
+                    break
+            if confirmed:
+                self.dragon.stock = confirmed['code']
+                self.dragon.streak = 3
+                self.dragon.sector = confirmed.get('sector', '')
+                self.dragon.broken = False
+                self.dragon.break_days = 0
+                self.dragon.peak_price = float(confirmed.get('price', 0))
+                self.dragon_candidates = []
+                self.dragon_confirmed_today = True
+                self.current_phase = '主升期'
+                print(f"    预选龙头确认：{confirmed['code']} {confirmed.get('name','')} 3板")
+                return '主升期'
+            else:
+                print(f"    预选股未三板或不可买，清空预选池（原有{len(self.dragon_candidates)}只）")
+                self.dragon_candidates = []
+
+        # ====== 2. 判断市场阶段（用前一日数据，避免未来函数） ======
+        phase = self.determine_phase(prev_market_stats, fetcher, prev_date)
+
+        # ====== 3. 预选新龙头候选（用于明天） ======
+        if phase in ('低位试错期', '高位震荡期') and not self.dragon_candidates:
+            candidates = self.preselect_dragons(today_zt_df, sector_analysis)
+            if candidates:
+                high_board = [c for c in candidates if c.get('is_high_board', False)]
+                s2_candidates = [c for c in candidates if not c.get('is_high_board', False)]
+
+                if high_board:
+                    # 高板股（≥3板）：直接确认龙头
+                    result = None
+                    for candidate in high_board:
+                        stock_df = self.filter_dragon_candidate(today_zt_df, candidate)
+                        if not stock_df.empty:
+                            result = candidate
+                            break
+                    if result:
+                        self.dragon.stock = result['code']
+                        self.dragon.streak = result['streak']
+                        self.dragon.sector = result.get('sector', '')
+                        self.dragon.broken = False
+                        self.dragon.break_days = 0
+                        self.dragon.peak_price = float(result.get('price', 0))
+                        self.dragon_confirmed_today = True
+                        self.current_phase = '主升期'
+                        print(f"    高板股直接设为龙头：{result['code']} {result.get('name','')} {result['streak']}板")
+                        return '主升期'
+                    elif s2_candidates:
+                        # 高板股不可买，退而预选二板股
+                        self.dragon_candidates = s2_candidates
+                        codes = [c['code'] for c in s2_candidates]
+                        print(f"    高板股不可买，预选二板股候选：{', '.join(codes)}（共{len(s2_candidates)}只）")
+                else:
+                    # 只有二板股，预选为候选
+                    self.dragon_candidates = s2_candidates
+                    codes = [c['code'] for c in s2_candidates]
+                    print(f"    预选龙头候选（二板股）：{', '.join(codes)}（共{len(s2_candidates)}只）")
+
+        self.current_phase = phase
+        return phase
+
+    # ========================
     # 股票筛选
     # ========================
 

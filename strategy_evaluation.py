@@ -425,6 +425,210 @@ class StrategyEvaluator:
         return metrics
 
     # ========================
+    # 亏损归因分析
+    # ========================
+
+    def analyze_loss_attribution(self) -> Dict:
+        """亏损归因分析：从多维度剖析所有亏损交易"""
+        if self.trade_records.empty:
+            return {}
+
+        # 提取卖出记录（有盈亏信息）
+        sell_records = self.trade_records[self.trade_records['action'] == 'sell'].copy()
+        if sell_records.empty:
+            return {}
+
+        # 亏损交易
+        loss_records = sell_records[sell_records['profit'] < 0].copy()
+        if loss_records.empty:
+            return {"无亏损交易": True}
+
+        total_loss = loss_records['profit'].sum()
+        loss_count = len(loss_records)
+        total_trades = len(sell_records)
+
+        results = {
+            '亏损交易次数': loss_count,
+            '总交易次数': total_trades,
+            '亏损占比(%)': loss_count / total_trades * 100,
+            '亏损总金额(元)': round(total_loss, 2),
+            '平均每笔亏损(元)': round(total_loss / loss_count, 2),
+            '平均亏损幅度(%)': round(loss_records['profit_pct'].mean() * 100, 2),
+        }
+
+        # 1. 按情绪周期归因
+        results['_按周期归因'] = {}
+        for phase in ['低位试错期', '主升期', '高位震荡期', '退潮期']:
+            phase_losses = loss_records[loss_records['phase'] == phase]
+            if not phase_losses.empty:
+                phase_total = sell_records[sell_records['phase'] == phase]
+                phase_trade_count = len(phase_total)
+                phase_loss_count = len(phase_losses)
+                results['_按周期归因'][phase] = {
+                    '亏损次数': phase_loss_count,
+                    '该周期交易次数': phase_trade_count,
+                    '该周期亏损率(%)': round(phase_loss_count / phase_trade_count * 100, 2) if phase_trade_count > 0 else 0,
+                    '亏损金额(元)': round(phase_losses['profit'].sum(), 2),
+                    '占亏损总额比例(%)': round(phase_losses['profit'].sum() / total_loss * 100, 2),
+                    '平均亏损幅度(%)': round(phase_losses['profit_pct'].mean() * 100, 2),
+                }
+
+        # 2. 按亏损幅度分层
+        results['_按亏损幅度分层'] = {}
+        bins = [(0, -2, '微亏(0%~2%)'), (-2, -5, '小亏(2%~5%)'), (-5, -10, '中亏(5%~10%)'), (-10, float('-inf'), '大亏(>10%)')]
+        for low, high, label in bins:
+            if high == float('-inf'):
+                mask = loss_records['profit_pct'] * 100 < low
+            else:
+                # profit_pct is negative, *100 = e.g. -5.3
+                # low/high are also negative thresholds
+                # low=0, high=-2 → mask = (> -2) & (<= 0)
+                # low=-2, high=-5 → mask = (> -5) & (<= -2)
+                mask = (loss_records['profit_pct'] * 100 > high) & (loss_records['profit_pct'] * 100 <= low)
+            layer = loss_records[mask]
+            if not layer.empty:
+                results['_按亏损幅度分层'][label] = {
+                    '次数': len(layer),
+                    '占比(%)': round(len(layer) / loss_count * 100, 2),
+                    '金额(元)': round(layer['profit'].sum(), 2),
+                    '占亏损总额比例(%)': round(layer['profit'].sum() / total_loss * 100, 2),
+                }
+
+        # 3. 按个股归因（亏损最多的股票）
+        results['_个股亏损Top10'] = []
+        stock_loss = loss_records.groupby(['code', 'name']).agg(
+            亏损次数=('code', 'count'),
+            亏损金额=('profit', 'sum'),
+            平均亏损率=('profit_pct', 'mean')
+        ).reset_index()
+        stock_loss['平均亏损率(%)'] = stock_loss['平均亏损率'] * 100
+        stock_loss = stock_loss.sort_values('亏损金额', ascending=True).head(10)
+        for _, row in stock_loss.iterrows():
+            results['_个股亏损Top10'].append({
+                '股票': f"{row['code']} {row['name']}",
+                '亏损次数': int(row['亏损次数']),
+                '亏损金额(元)': round(row['亏损金额'], 2),
+                '平均亏损率(%)': round(row['平均亏损率(%)'], 2),
+            })
+
+        # 4. 按月份归因
+        results['_月份亏损Top10'] = []
+        loss_with_month = loss_records.copy()
+        loss_with_month['date'] = pd.to_datetime(loss_with_month['date'], format='%Y%m%d')
+        loss_with_month['month'] = loss_with_month['date'].dt.to_period('M')
+        monthly_loss = loss_with_month.groupby('month').agg(
+            亏损次数=('code', 'count'),
+            亏损金额=('profit', 'sum'),
+        ).reset_index()
+        monthly_loss = monthly_loss.sort_values('亏损金额', ascending=True).head(10)
+        for _, row in monthly_loss.iterrows():
+            results['_月份亏损Top10'].append({
+                '月份': str(row['month']),
+                '亏损次数': int(row['亏损次数']),
+                '亏损金额(元)': round(row['亏损金额'], 2),
+            })
+
+        # 5. 连续亏损分析
+        sell_sorted = sell_records.sort_values('date')
+        max_loss_streak = 0
+        current_streak = 0
+        streak_start = None
+        streak_end = None
+        max_streak_losses = []
+        current_streak_losses = []
+        for idx, row in sell_sorted.iterrows():
+            if row['profit'] < 0:
+                if current_streak == 0:
+                    streak_start = row['date']
+                current_streak += 1
+                current_streak_losses.append(row['profit'])
+                streak_end = row['date']
+                if current_streak > max_loss_streak:
+                    max_loss_streak = current_streak
+                    max_streak_losses = list(current_streak_losses)
+                    results['_最大连续亏损'] = {
+                        '连续亏损次数': current_streak,
+                        '起始日期': str(streak_start),
+                        '结束日期': str(streak_end),
+                        '累计亏损(元)': round(sum(current_streak_losses), 2),
+                    }
+            else:
+                current_streak = 0
+                current_streak_losses = []
+
+        # 6. 亏损买卖点分析
+        loss_records_with_bb = loss_records.dropna(subset=['buy_price', 'sell_price'])
+        if not loss_records_with_bb.empty:
+            loss_records_with_bb = loss_records_with_bb.copy()
+            loss_records_with_bb['buy_price'] = pd.to_numeric(loss_records_with_bb['buy_price'], errors='coerce')
+            loss_records_with_bb['sell_price'] = pd.to_numeric(loss_records_with_bb['sell_price'], errors='coerce')
+            loss_records_with_bb = loss_records_with_bb.dropna(subset=['buy_price', 'sell_price'])
+            if not loss_records_with_bb.empty:
+                loss_records_with_bb['跌幅(%)'] = (loss_records_with_bb['sell_price'] - loss_records_with_bb['buy_price']) / loss_records_with_bb['buy_price'] * 100
+                avg_drop = loss_records_with_bb['跌幅(%)'].mean()
+                max_drop = loss_records_with_bb['跌幅(%)'].min()
+                results['亏损买卖点分析'] = {
+                    '平均买入到卖出跌幅(%)': round(avg_drop, 2),
+                    '最大买入到卖出跌幅(%)': round(max_drop, 2),
+                    '亏损交易样本数': len(loss_records_with_bb),
+                }
+
+        return results
+
+    def print_loss_attribution(self, loss_analysis: Dict):
+        """打印亏损归因分析报告"""
+        if not loss_analysis:
+            return
+        if '无亏损交易' in loss_analysis:
+            print("  [OK] 无亏损交易，无需归因")
+            return
+
+        print(f"\n【亏损归因分析】")
+        print("-" * 80)
+        print(f"  总亏损交易: {loss_analysis['亏损交易次数']}/{loss_analysis['总交易次数']} ({loss_analysis['亏损占比(%)']:.2f}%)")
+        print(f"  亏损总金额: {loss_analysis['亏损总金额(元)']:.2f} 元")
+        print(f"  平均每笔亏损: {loss_analysis['平均每笔亏损(元)']:.2f} 元")
+        print(f"  平均亏损幅度: {loss_analysis['平均亏损幅度(%)']:.2f}%")
+
+        # 1. 按周期归因
+        print(f"\n  ▶ 按情绪周期归因")
+        for phase, info in loss_analysis.get('_按周期归因', {}).items():
+            print(f"    {phase}:")
+            print(f"      亏损 {info['亏损次数']}次 / 该周期交易 {info['该周期交易次数']}次 (亏损率 {info['该周期亏损率(%)']:.1f}%)")
+            print(f"      亏损金额 {info['亏损金额(元)']:.0f} 元 (占亏损总额 {info['占亏损总额比例(%)']:.1f}%)")
+            print(f"      平均亏损幅度 {info['平均亏损幅度(%)']:.2f}%")
+
+        # 2. 按亏损幅度分层
+        print(f"\n  ▶ 按亏损幅度分层")
+        for label, info in loss_analysis.get('_按亏损幅度分层', {}).items():
+            print(f"    {label}: {info['次数']}次 ({info['占比(%)']:.1f}%), 金额 {info['金额(元)']:.0f} 元 ({info['占亏损总额比例(%)']:.1f}%)")
+
+        # 3. 个股亏损Top10
+        print(f"\n  ▶ 个股亏损Top10")
+        for item in loss_analysis.get('_个股亏损Top10', []):
+            print(f"    {item['股票']}: 亏损{item['亏损次数']}次, 共{item['亏损金额(元)']:.0f}元, 平均亏损率{item['平均亏损率(%)']:.1f}%")
+
+        # 4. 月份亏损Top10
+        print(f"\n  ▶ 月份亏损Top10")
+        for item in loss_analysis.get('_月份亏损Top10', []):
+            print(f"    {item['月份']}: 亏损{item['亏损次数']}次, 共{item['亏损金额(元)']:.0f}元")
+
+        # 5. 最大连续亏损
+        max_streak = loss_analysis.get('_最大连续亏损', {})
+        if max_streak:
+            print(f"\n  ▶ 最大连续亏损")
+            print(f"    连续{max_streak['连续亏损次数']}笔, {max_streak['起始日期']} ~ {max_streak['结束日期']}")
+            print(f"    累计亏损 {max_streak['累计亏损(元)']:.0f} 元")
+
+        # 6. 买卖点分析
+        bb = loss_analysis.get('亏损买卖点分析', {})
+        if bb:
+            print(f"\n  ▶ 亏损买卖点分析")
+            print(f"    平均买入→卖出跌幅: {bb['平均买入到卖出跌幅(%)']:.2f}%")
+            print(f"    最大买入→卖出跌幅: {bb['最大买入到卖出跌幅(%)']:.2f}%")
+            print(f"    样本数: {bb['亏损交易样本数']}笔")
+
+    # ========================
     # 综合评估
     # ========================
 
@@ -493,6 +697,15 @@ class StrategyEvaluator:
             else:
                 print(f"  {key}: {value}")
         all_metrics.update(other_metrics)
+
+        # 亏损归因分析
+        print("\n" + "=" * 80)
+        print("亏损归因分析")
+        print("=" * 80)
+        loss_analysis = self.analyze_loss_attribution()
+        self.print_loss_attribution(loss_analysis)
+        if loss_analysis and '无亏损交易' not in loss_analysis:
+            all_metrics['亏损归因'] = loss_analysis
 
         return all_metrics
 

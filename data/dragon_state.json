@@ -8,6 +8,15 @@
     "peak_price": 0.0
   },
   "current_phase": "低位试错期",
-  "dragon_candidates": [],
+"dragon_candidates": [
+    {
+      "code": "002649",
+      "name": "博彦科技",
+      "sector": "华为概念",
+      "price": 11.29,
+      "streak": 2,
+      "is_high_board": false
+    }
+  ],
   "last_update": "20260807"
 }

@@ -109,125 +109,30 @@ class BacktestEngine:
                     self.prev_market_stats = None
                     continue
 
-                # ========== 判断市场阶段（用T-1的数据，避免未来函数）==========
-                if self.prev_market_stats:
-                    phase = self.tracker.determine_phase(self.prev_market_stats, self.fetcher, self.prev_date)
-                else:
-                    # 第一天没有前一天数据，用当天数据
-                    phase = self.tracker.determine_phase(market_stats, self.fetcher, date)
-                self.tracker.current_phase = phase
+                # ========== 统一策略处理（process_day = 阶段判定 + 预选确认 + 预选新候选）==========
+                phase = self.tracker.process_day(
+                    prev_market_stats=self.prev_market_stats or market_stats,
+                    today_zt_df=market_stats['zt_df'],
+                    fetcher=self.fetcher,
+                    prev_date=self.prev_date or date,
+                    sector_analysis=market_stats.get('sector_analysis', {})
+                )
 
-                # ========== 预选确认（用T的zt_df检查预选股是否三板）==========
-                # 这是正确的时间线：T-1预选，T日盘中观察是否三板
-                bought_dragon_today = False  # 标记今天是否已买入龙头
-                if self.tracker.dragon_candidates:
-                    # 遍历预选候选，找第一个可买的
-                    for candidate in self.tracker.dragon_candidates:
-                        stock_df = self.tracker.filter_dragon_candidate(market_stats['zt_df'], candidate)
-                        if not stock_df.empty:
-                            # 找到可买的预选股，执行买入
-                            stock_info = stock_df.iloc[0].to_dict()
-                            success = self.broker.execute_buy(date, stock_info, '主升期')
-                            if success:
-                                # 买入成功，确认龙头，进入主升期
-                                self.tracker.dragon.stock = candidate['code']
-                                self.tracker.dragon.streak = 3
-                                self.tracker.dragon.sector = candidate.get('sector', '')
-                                self.tracker.dragon.broken = False
-                                self.tracker.dragon.break_days = 0
-                                self.tracker.dragon.peak_price = float(stock_info.get('price', 0))
-                                self.tracker.dragon_candidates = []
-                                phase = '主升期'
-                                self.tracker.current_phase = phase
-                                bought_dragon_today = True  # 标记今天已买入
-                                print(f"    龙头确认：{candidate['code']} {candidate.get('name','')} 3板 板块={self.tracker.dragon.sector or '未知'}（预选成功，已买入）")
-                                print(f"  买入：{candidate['code']} {candidate.get('name', '')} 仓位100%")
-                                break
-
-                    if not bought_dragon_today:
-                        # 预选股没有三板或不可买，清空预选池
-                        print(f"    预选股未三板或不可买，清空预选池（原有{len(self.tracker.dragon_candidates)}只）")
-                        self.tracker.dragon_candidates = []
-
-                # 如果今天已经买入龙头（预选确认），跳过后续流程
-                if bought_dragon_today:
-                    self.log_decision(date, phase, True, '预选股三板买入成功', 1)
-                    self.prev_market_stats = market_stats
-                    self.prev_date = date
-                    continue
-
-                # ========== 预选龙头候选 ==========
-                # 优先级：高板股（≥3板）> 二板股
-                # bought_dragon_today已在前面定义，这里不需要重新定义
-                if not self.tracker.dragon_candidates and phase in ('低位试错期', '高位震荡期'):
-                    candidates = self.tracker.preselect_dragons(market_stats['zt_df'], market_stats.get('sector_analysis', {}))
-                    if candidates:
-                        # 分离高板股和二板股
-                        high_board_candidates = [c for c in candidates if c.get('is_high_board', False)]
-                        s2_candidates = [c for c in candidates if not c.get('is_high_board', False)]
-
-                        # 优先处理高板股：直接买入作为龙头
-                        if high_board_candidates:
-                            # 找连板数最高的
-                            best_high = max(high_board_candidates, key=lambda x: x.get('streak', 0))
-                            stock_df = self.tracker.filter_dragon_candidate(market_stats['zt_df'], best_high)
-                            if not stock_df.empty:
-                                stock_info = stock_df.iloc[0].to_dict()
-                                success = self.broker.execute_buy(date, stock_info, '主升期')
-                                if success:
-                                    # 买入成功，确认龙头，进入主升期
-                                    self.tracker.dragon.stock = best_high['code']
-                                    self.tracker.dragon.streak = best_high['streak']
-                                    self.tracker.dragon.sector = best_high.get('sector', '')
-                                    self.tracker.dragon.broken = False
-                                    self.tracker.dragon.break_days = 0
-                                    self.tracker.dragon.peak_price = float(stock_info.get('price', 0))
-                                    phase = '主升期'
-                                    self.tracker.current_phase = phase
-                                    bought_dragon_today = True  # 标记今天已买入
-                                    print(f"    龙头确认：{best_high['code']} {best_high.get('name','')} {best_high['streak']}板 板块={self.tracker.dragon.sector or '未知'}（高板股直接买入）")
-                                    print(f"  买入：{best_high['code']} {best_high.get('name', '')} 仓位100%")
-                                else:
-                                    # 买入失败，检查下一个高板股
-                                    print(f"    高板股 {best_high['code']} 买入失败")
-                            # 如果高板股买入失败或不可买，继续尝试其他高板股
-                            # 如果所有高板股都不可买，才预选二板股
-                            if not bought_dragon_today:
-                                # 尝试其他高板股
-                                for candidate in high_board_candidates[1:]:
-                                    stock_df = self.tracker.filter_dragon_candidate(market_stats['zt_df'], candidate)
-                                    if not stock_df.empty:
-                                        stock_info = stock_df.iloc[0].to_dict()
-                                        success = self.broker.execute_buy(date, stock_info, '主升期')
-                                        if success:
-                                            self.tracker.dragon.stock = candidate['code']
-                                            self.tracker.dragon.streak = candidate['streak']
-                                            self.tracker.dragon.sector = candidate.get('sector', '')
-                                            self.tracker.dragon.broken = False
-                                            self.tracker.dragon.break_days = 0
-                                            self.tracker.dragon.peak_price = float(stock_info.get('price', 0))
-                                            phase = '主升期'
-                                            self.tracker.current_phase = phase
-                                            bought_dragon_today = True  # 标记今天已买入
-                                            print(f"    龙头确认：{candidate['code']} {candidate.get('name','')} {candidate['streak']}板 板块={self.tracker.dragon.sector or '未知'}（高板股直接买入）")
-                                            print(f"  买入：{candidate['code']} {candidate.get('name', '')} 仓位100%")
-                                            break
-
-                                # 如果所有高板股都不可买，预选二板股
-                                if not bought_dragon_today and s2_candidates:
-                                    self.tracker.dragon_candidates = s2_candidates
-                                    codes = [c['code'] for c in s2_candidates]
-                                    print(f"    高板股不可买，预选二板股候选：{', '.join(codes)}（共{len(s2_candidates)}只）")
-
-                        # 没有高板股，预选二板股
-                        elif s2_candidates:
-                            self.tracker.dragon_candidates = s2_candidates
-                            codes = [c['code'] for c in s2_candidates]
-                            print(f"    预选龙头候选（二板股）：{', '.join(codes)}（共{len(s2_candidates)}只）")
-
-                # 如果今天已经买入龙头，跳过后续买入筛选
-                if bought_dragon_today:
-                    self.log_decision(date, phase, True, '高板股买入成功', 1)
+                # 如果今天确认了龙头，执行买入
+                if self.tracker.dragon_confirmed_today:
+                    dragon = self.tracker.dragon
+                    zt_df = market_stats['zt_df']
+                    dragon_row = zt_df[zt_df['code'] == dragon.stock]
+                    if not dragon_row.empty:
+                        stock_info = dragon_row.iloc[0].to_dict()
+                        success = self.broker.execute_buy(date, stock_info, '主升期')
+                        if success:
+                            name = dragon_row.iloc[0].get('name', '')
+                            print(f"  买入龙头：{dragon.stock} {name} 仓位100%")
+                            self.log_decision(date, phase, True, '龙头确认买入', 1, f"{dragon.stock} {name}")
+                        else:
+                            print(f"  买入龙头失败：{dragon.stock}")
+                            self.log_decision(date, phase, False, '龙头买入失败', 0)
                     self.prev_market_stats = market_stats
                     self.prev_date = date
                     continue

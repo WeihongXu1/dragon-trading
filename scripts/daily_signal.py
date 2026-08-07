@@ -18,6 +18,7 @@ import os
 import json
 import argparse
 from datetime import datetime, timedelta
+import pandas as pd
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -154,6 +155,29 @@ def print_signal(tracker: DragonTracker, market_stats: dict, today: str, prev_da
             print(f"    最高价：{dragon.peak_price:.2f}")
     else:
         print(f"    无龙头确认")
+    print()
+
+    # ── 预选龙头候选 ──
+    print("  🎯 预选龙头候选（今日观察）")
+    candidates = tracker.dragon_candidates
+    if candidates:
+        zt_df = market_stats.get('zt_df', pd.DataFrame())
+        for i, c in enumerate(candidates, 1):
+            name = c.get('name', '')
+            sec = c.get('sector', '未知')
+            streak = c.get('streak', 2)
+            # 检查是否已涨停
+            is_zt = False
+            if not zt_df.empty and 'code' in zt_df.columns:
+                stock = zt_df[zt_df['code'] == c['code']]
+                if not stock.empty:
+                    is_zt = True
+                    name = stock.iloc[0].get('name', name)
+            zt_mark = ' ✅' if is_zt else ''
+            print(f"    {i}. {c['code']} {name} {streak}板 板块={sec}{zt_mark}")
+        print(f"    （共{len(candidates)}只候选，观察今日是否三板晋级）")
+    else:
+        print(f"    无预选候选（等待二板股出现）")
     print()
 
     # ── 交易信号 ──
@@ -351,6 +375,41 @@ def generate_html(tracker: DragonTracker, market_stats: dict, today: str, prev_d
             <div class="no-data">暂无龙头确认</div>
         </div>'''
 
+    # ── 预选龙头候选 HTML ──
+    candidates_html = ''
+    candidates = tracker.dragon_candidates
+    if candidates:
+        items_html = ''
+        zt_df = market_stats.get('zt_df', pd.DataFrame())
+        for c in candidates:
+            name = c.get('name', '')
+            sec = c.get('sector', '未知')
+            streak = c.get('streak', 2)
+            is_zt = False
+            if not zt_df.empty and 'code' in zt_df.columns:
+                stock = zt_df[zt_df['code'] == c['code']]
+                if not stock.empty:
+                    is_zt = True
+                    name = stock.iloc[0].get('name', name)
+            zt_tag = ' <span class="tag" style="background:#e8f5e9;color:#2e7d32;">已涨停</span>' if is_zt else ' <span class="tag" style="background:#fff3e0;color:#e65100;">未涨停</span>'
+            items_html += f'''
+            <div class="info-row">
+                <span class="info-label">{c["code"]} {name}</span>
+                <span class="info-value">{streak}板 板块={sec}{zt_tag}</span>
+            </div>'''
+        candidates_html = f'''
+        <div class="card">
+            <div class="section-title">🎯 预选龙头候选（今日观察）</div>
+            {items_html}
+            <div class="no-data" style="padding-top:6px;font-size:12px;color:#888;">共{len(candidates)}只候选，观察今日是否三板晋级</div>
+        </div>'''
+    else:
+        candidates_html = '''
+        <div class="card">
+            <div class="section-title">🎯 预选龙头候选（今日观察）</div>
+            <div class="no-data">暂无预选候选（等待二板股出现）</div>
+        </div>'''
+
     # 违规预警
     warning_html = ''
     if can_trade:
@@ -457,6 +516,8 @@ body {{
 
 {dragon_html}
 
+{candidates_html}
+
 <div class="card">
     <div class="section-title">🚦 交易信号</div>
     <div class="phase-info">
@@ -547,9 +608,14 @@ def main():
         print(f"[ERROR] {prev_date} 无涨停数据")
         return
 
-    # ── 判断阶段（用T-1数据判断T日） ──
-    phase = tracker.determine_phase(market_stats, fetcher, prev_date)
-    tracker.current_phase = phase
+    # ── 统一策略处理（process_day = 阶段判定 + 预选确认 + 预选新候选） ──
+    phase = tracker.process_day(
+        prev_market_stats=market_stats,
+        today_zt_df=market_stats['zt_df'],
+        fetcher=fetcher,
+        prev_date=prev_date,
+        sector_analysis=market_stats.get('sector_analysis', {})
+    )
 
     # ── 保存状态 ──
     save_tracker(tracker)
