@@ -10,17 +10,9 @@
   "current_phase": "低位试错期",
   "dragon_candidates": [
     {
-      "code": "600272",
-      "name": "开开实业",
-      "sector": "2026中报预增",
-      "price": 12.97,
-      "streak": 2,
-      "is_high_board": false
-    },
-    {
       "code": "600601",
       "name": "方正科技",
-      "sector": "2026中报预增",
+      "sector": "元件",
       "price": 12.87,
       "streak": 2,
       "is_high_board": false
@@ -28,7 +20,7 @@
     {
       "code": "002194",
       "name": "武汉凡谷",
-      "sector": "华为概念",
+      "sector": "通信设备",
       "price": 11.1,
       "streak": 2,
       "is_high_board": false
