@@ -2,8 +2,8 @@ name: 每日交易信号
 
 on:
   schedule:
-    # 工作日 6:00 CST = 22:00 UTC
-    - cron: '0 22 * * 1-5'
+    # 每天 6:00 CST = 22:00 UTC（周日-周五，覆盖周一早上）
+    - cron: '0 22 * * 0-5'
   # 支持手动触发（在GitHub网页上点按钮）
   workflow_dispatch:
 
