@@ -10,13 +10,29 @@
   "current_phase": "低位试错期",
   "dragon_candidates": [
     {
-      "code": "002649",
-      "name": "博彦科技",
+      "code": "600272",
+      "name": "开开实业",
+      "sector": "2026中报预增",
+      "price": 12.97,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "600601",
+      "name": "方正科技",
+      "sector": "2026中报预增",
+      "price": 12.87,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "002194",
+      "name": "武汉凡谷",
       "sector": "华为概念",
-      "price": 11.29,
+      "price": 11.1,
       "streak": 2,
       "is_high_board": false
     }
   ],
-  "last_update": "20260807"
+  "last_update": "20260810"
 }
