@@ -19,10 +19,6 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
     steps:
       - name: 检出代码（含历史状态文件）
         uses: actions/checkout@v4
@@ -85,7 +81,7 @@ jobs:
               请稍后再试，或手动触发 workflow 重试
             </div>
           </div>
-          <div class="footer">自动生成于 $(date +'%Y-%m-%d %H:%M')</div>
+          <div class="footer">自动生成于 $(date +'%Y%m%d %H:%M')</div>
           </body>
           </html>
           FALLBACK
@@ -111,7 +107,17 @@ jobs:
         with:
           path: ./public
 
+  deploy:
+    needs: build
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - name: 部署到GitHub Pages
-        if: always()
         id: deployment
         uses: actions/deploy-pages@v4
