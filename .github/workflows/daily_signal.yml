@@ -7,9 +7,6 @@ on:
   # 支持手动触发（在GitHub网页上点按钮）
   workflow_dispatch:
 
-env:
-  TZ: Asia/Shanghai
-
 permissions:
   contents: write
   pages: write

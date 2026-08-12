@@ -17,7 +17,7 @@ import sys
 import os
 import json
 import argparse
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import pandas as pd
 
 # 添加项目根目录到路径
@@ -258,7 +258,7 @@ def print_signal(tracker: DragonTracker, market_stats: dict, today: str, prev_da
     print()
 
 
-def generate_html(tracker: DragonTracker, market_stats: dict, today: str, prev_date: str, fetcher: DataFetcher = None):
+def generate_html(tracker: DragonTracker, market_stats: dict, today: str, prev_date: str, fetcher: DataFetcher = None, cst_footer: str = ''):
     """生成手机端HTML网页"""
     phase = tracker.current_phase
     dragon = tracker.dragon
@@ -576,7 +576,7 @@ def pushplus_notify(token: str, signal_text: str, phase: str, advice: str, url: 
     pass  # 已废弃，不再使用
 
 
-def generate_fallback_html(today: str, error_msg: str = ''):
+def generate_fallback_html(today: str, error_msg: str = '', cst_footer: str = ''):
     """生成降级网页（数据获取失败时使用）"""
     html = f'''<!DOCTYPE html>
 <html lang="zh-CN">
@@ -612,7 +612,7 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC
     </div>
 </div>
 <div class="footer">
-    自动生成于 {datetime.now().strftime('%Y-%m-%d %H:%M')}
+    自动生成于 {cst_footer or datetime.now().strftime('%Y-%m-%d %H:%M')}
 </div>
 </body>
 </html>'''
@@ -636,7 +636,10 @@ def main():
                         help='在网页下方追加T-1日交易回顾')
     args = parser.parse_args()
 
-    today = args.date or datetime.now().strftime('%Y%m%d')
+    # 使用北京时间（CST, UTC+8），避免 GitHub runner 的 UTC 时区导致日期偏移
+    cst_now = datetime.now(timezone.utc) + timedelta(hours=8)
+    today = args.date or cst_now.strftime('%Y%m%d')
+    cst_footer = cst_now.strftime('%Y-%m-%d %H:%M')
 
     # ── 初始化 ──
     fetcher = DataFetcher()
@@ -650,7 +653,7 @@ def main():
         print(f"[ERROR] 未找到 {today} 之前的有效数据")
         print("[HINT] 检查 data/store/ 目录下是否有数据文件，或网络是否正常")
         if args.html:
-            generate_fallback_html(today, '未找到前一日有效数据，网络或数据源异常')
+            generate_fallback_html(today, '未找到前一日有效数据，网络或数据源异常', cst_footer)
         return
 
     print(f"[OK] 使用 {prev_date} 的数据判断 {today} 的阶段")
@@ -659,7 +662,7 @@ def main():
     if not market_stats or market_stats.get('total_limit_up', 0) == 0:
         print(f"[ERROR] {prev_date} 无涨停数据")
         if args.html:
-            generate_fallback_html(today, f'{prev_date} 无涨停数据，数据源可能为空')
+            generate_fallback_html(today, f'{prev_date} 无涨停数据，数据源可能为空', cst_footer)
         return
 
     # ── 统一策略处理（process_day = 阶段判定 + 预选确认 + 预选新候选） ──
@@ -674,7 +677,7 @@ def main():
     except Exception as e:
         print(f"[ERROR] 策略处理失败: {e}")
         if args.html:
-            generate_fallback_html(today, f'策略处理异常: {e}')
+            generate_fallback_html(today, f'策略处理异常: {e}', cst_footer)
         return
 
     # ── 保存状态 ──
@@ -685,7 +688,7 @@ def main():
 
     # ── 生成网页（如果指定了 --html） ──
     if args.html:
-        generate_html(tracker, market_stats, today, prev_date, fetcher)
+        generate_html(tracker, market_stats, today, prev_date, fetcher, cst_footer)
 
     # ── 网页追加T-1日回顾（如果指定了 --review） ──
     if args.review and args.html:
