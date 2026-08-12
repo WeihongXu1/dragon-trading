@@ -148,6 +148,7 @@ class DataFetcher:
             df = ak.stock_zt_pool_em(date=date_compact)
             if df.empty:
                 return pd.DataFrame()
+            self._data_source = 'akshare'
             return self._apply_concept_cache(self._clean_limit_up_data(df), date)
         except Exception as e:
             print(f"获取涨停股数据失败：{e}")

@@ -7,6 +7,9 @@ on:
   # 支持手动触发（在GitHub网页上点按钮）
   workflow_dispatch:
 
+env:
+  TZ: Asia/Shanghai
+
 permissions:
   contents: write
   pages: write
@@ -38,9 +41,61 @@ jobs:
           pip install -r requirements.txt
 
       - name: 运行信号脚本
+        id: signal
+        continue-on-error: true
         run: python scripts/daily_signal.py --html --review
 
+      - name: 检查 signal 是否生成
+        id: check_html
+        run: |
+          if [ -f public/index.html ]; then
+            echo "html_generated=true" >> $GITHUB_OUTPUT
+          else
+            echo "html_generated=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 生成降级页面（信号脚本失败时兜底）
+        if: steps.check_html.outputs.html_generated != 'true'
+        run: |
+          mkdir -p public
+          cat > public/index.html << 'FALLBACK'
+          <!DOCTYPE html>
+          <html lang="zh-CN">
+          <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+          <title>龙抬头 - 信号待更新</title>
+          <style>
+          *{margin:0;padding:0;box-sizing:border-box;}
+          body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:#f0f2f5;color:#333;padding:12px;max-width:480px;margin:0 auto;}
+          .header{text-align:center;padding:16px 0 8px;}
+          .header h1{font-size:20px;font-weight:700;color:#1a1a2e;}
+          .card{background:#fff;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,0.08);}
+          .signal{text-align:center;padding:28px 16px;border-radius:14px;font-size:24px;font-weight:700;color:#fff;margin:12px 0;background:linear-gradient(135deg,#fb8c00,#ef6c00);}
+          .warn{color:#c62828;text-align:center;font-size:14px;padding:12px;}
+          .footer{text-align:center;color:#aaa;font-size:11px;padding:16px 0;}
+          </style>
+          </head>
+          <body>
+          <div class="header">
+            <h1>🐉 龙抬头 · 交易信号</h1>
+            <div class="date">$(date +'%Y%m%d')</div>
+          </div>
+          <div class="signal">⏳ 信号待更新</div>
+          <div class="card">
+            <div class="warn">数据获取失败，无法生成今日信号</div>
+            <div style="text-align:center;color:#888;font-size:12px;padding:8px 0;">
+              请稍后再试，或手动触发 workflow 重试
+            </div>
+          </div>
+          <div class="footer">自动生成于 $(date +'%Y-%m-%d %H:%M')</div>
+          </body>
+          </html>
+          FALLBACK
+          echo "降级页面已生成"
+
       - name: 提交龙头状态更新
+        if: steps.signal.outcome == 'success'
         run: |
           git config user.name "DragonSignal Bot"
           git config user.email "bot@dragon-trading"
@@ -49,16 +104,17 @@ jobs:
             echo "状态无变化，跳过提交"
           else
             git commit -m "自动更新龙头状态 $(date +'%Y%m%d')"
-            # pull --rebase 避免远程领先导致 push 被拒
             git pull --rebase --autostash || echo "pull --rebase 失败，继续尝试 push"
             git push
           fi
 
       - name: 上传网页
+        if: always()
         uses: actions/upload-pages-artifact@v5
         with:
           path: ./public
 
       - name: 部署到GitHub Pages
+        if: always()
         id: deployment
         uses: actions/deploy-pages@v4
