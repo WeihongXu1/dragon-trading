@@ -10,45 +10,13 @@
   "current_phase": "低位试错期",
   "dragon_candidates": [
     {
-      "code": "000859",
-      "name": "国风新材",
+      "code": "603118",
+      "name": "共进股份",
       "sector": "国企改革",
-      "price": 10.48,
-      "streak": 2,
-      "is_high_board": false
-    },
-    {
-      "code": "600833",
-      "name": "第一医药",
-      "sector": "国企改革",
-      "price": 12.11,
-      "streak": 2,
-      "is_high_board": false
-    },
-    {
-      "code": "001258",
-      "name": "立新能源",
-      "sector": "国企改革",
-      "price": 15.93,
-      "streak": 2,
-      "is_high_board": false
-    },
-    {
-      "code": "002329",
-      "name": "皇氏集团",
-      "sector": "绿色电力",
-      "price": 3.82,
-      "streak": 2,
-      "is_high_board": false
-    },
-    {
-      "code": "605286",
-      "name": "同力天启",
-      "sector": "绿色电力",
-      "price": 28.17,
+      "price": 17.56,
       "streak": 2,
       "is_high_board": false
     }
   ],
-  "last_update": "20260812"
+  "last_update": "20260814"
 }
