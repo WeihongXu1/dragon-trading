@@ -308,8 +308,13 @@ class DragonTracker:
         if sector_analysis is None:
             sector_analysis = prev_market_stats.get('sector_analysis', {})
 
-        # ====== 1. 确认预选股（昨天预选，今天检查是否三板） ======
-        if self.dragon_candidates:
+        # ====== 1. 先判断市场阶段（用前一日数据，避免未来函数） ======
+        # 必须在确认预选股之前，防止退潮期还确认龙头
+        phase = self.determine_phase(prev_market_stats, fetcher, prev_date)
+
+        # ====== 2. 确认预选股（昨天预选，今天检查是否三板） ======
+        # 只有在非退潮期才确认预选股
+        if phase != '退潮期' and self.dragon_candidates:
             confirmed = None
             for candidate in self.dragon_candidates:
                 stock_df = self.filter_dragon_candidate(today_zt_df, candidate)
@@ -331,9 +336,8 @@ class DragonTracker:
             else:
                 print(f"    预选股未三板或不可买，清空预选池（原有{len(self.dragon_candidates)}只）")
                 self.dragon_candidates = []
-
-        # ====== 2. 判断市场阶段（用前一日数据，避免未来函数） ======
-        phase = self.determine_phase(prev_market_stats, fetcher, prev_date)
+                self.current_phase = phase
+                return phase
 
         # ====== 3. 预选新龙头候选（用于明天） ======
         if phase in ('低位试错期', '高位震荡期') and not self.dragon_candidates:

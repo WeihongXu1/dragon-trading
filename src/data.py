@@ -11,7 +11,6 @@
 4. 统计板块涨停情况
 """
 
-import akshare as ak
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
@@ -145,6 +144,7 @@ class DataFetcher:
                 return self._apply_concept_cache(zt_df, date)
 
         try:
+            import akshare as ak
             df = ak.stock_zt_pool_em(date=date_compact)
             if df.empty:
                 return pd.DataFrame()
@@ -256,6 +256,7 @@ class DataFetcher:
 
     def _eastmoney_top_sectors(self, zt_codes: set, top_n: int = 5) -> tuple:
         """东方财富API获取涨停最多的概念板块"""
+        import akshare as ak
         concept_df = ak.stock_board_concept_name_em()
         hot_sectors = concept_df.sort_values('上涨家数', ascending=False).head(30)
 
@@ -396,6 +397,7 @@ class DataFetcher:
                     'market_stable': sh_change > -2.0 and sz_change > -2.0}
 
         try:
+            import akshare as ak
             date_compact = date.replace('-', '')
             sh_df = ak.stock_zh_index_daily(symbol="sh000001")
             if not sh_df.empty:
@@ -430,6 +432,7 @@ class DataFetcher:
         if date_compact in self._limit_down_by_date:
             return self._limit_down_by_date[date_compact]
         try:
+            import akshare as ak
             df = ak.stock_zt_pool_dtgc_em(date=date_compact)
             if df.empty:
                 return 0
@@ -450,6 +453,7 @@ class DataFetcher:
             if not kline.empty:
                 return kline[['date', 'open', 'close', 'high', 'low', 'volume', 'amount']].copy()
         try:
+            import akshare as ak
             df = ak.stock_zh_a_hist(symbol=code_clean, period='daily',
                                     start_date=start_date, end_date=end_date, adjust='qfq')
             if df.empty:

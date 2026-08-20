@@ -19,7 +19,6 @@ author: assistant
 version: 20260723
 """
 
-import akshare as ak
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
@@ -62,6 +61,7 @@ class DataDownloader:
             DataFrame: 涨停股数据
         """
         try:
+            import akshare as ak
             print(f"  下载涨停股数据: {date}")
             df = ak.stock_zt_pool_em(date=date)
 
@@ -186,6 +186,7 @@ class DataDownloader:
             DataFrame: 指数数据
         """
         try:
+            import akshare as ak
             print("  下载大盘指数数据...")
             index_df = ak.stock_zh_index_spot()
 
@@ -209,6 +210,7 @@ class DataDownloader:
             int: 跌停股数量
         """
         try:
+            import akshare as ak
             print(f"  下载跌停股数据: {date}")
             df = ak.stock_zt_pool_dtgc_em(date=date)
 

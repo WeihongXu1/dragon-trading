@@ -37,8 +37,11 @@ class BacktestEngine:
         # 结果记录
         self.summary: Dict = {}
 
-        # 决策日志（新增）
+        # 决策日志
         self.decision_log: List[Dict] = []
+
+        # 每日组合价值（用于计算日收益率、最大回撤等）
+        self.daily_portfolio_values: List[Dict] = []
 
         # 前一日数据
         self.prev_market_stats = None
@@ -97,8 +100,26 @@ class BacktestEngine:
 
         trading_dates = self.get_trading_dates()
 
+        # 记录初始组合价值
+        self.daily_portfolio_values.append({
+            'date': trading_dates[0],
+            'cash': round(self.initial_capital, 2),
+            'position_value': 0.0,
+            'portfolio_value': round(self.initial_capital, 2)
+        })
+
         for date in trading_dates:
             try:
+                # 记录前一日收盘组合价值（用于计算日收益率）
+                if self.prev_date:
+                    pos_value = self.broker.get_position_value(self.fetcher, self.prev_date)
+                    self.daily_portfolio_values.append({
+                        'date': self.prev_date,
+                        'cash': round(self.broker.capital, 2),
+                        'position_value': round(pos_value, 2),
+                        'portfolio_value': round(self.broker.capital + pos_value, 2)
+                    })
+
                 print(f"\n处理日期：{date}")
 
                 # 获取市场数据
@@ -287,6 +308,16 @@ class BacktestEngine:
             except Exception as e:
                 print(f"  处理失败：{e}")
                 continue
+
+        # 记录最后一日组合价值
+        if self.prev_date:
+            pos_value = self.broker.get_position_value(self.fetcher, self.prev_date)
+            self.daily_portfolio_values.append({
+                'date': self.prev_date,
+                'cash': round(self.broker.capital, 2),
+                'position_value': round(pos_value, 2),
+                'portfolio_value': round(self.broker.capital + pos_value, 2)
+            })
 
         self._print_results()
 
@@ -484,3 +515,12 @@ class BacktestEngine:
                 print(f"  汇总结果：{summary_path}")
             except PermissionError:
                 pass
+
+        # 每日组合价值
+        try:
+            portfolio_df = pd.DataFrame(self.daily_portfolio_values)
+            portfolio_path = os.path.join(data_dir, 'daily_portfolio.csv')
+            portfolio_df.to_csv(portfolio_path, index=False, encoding='utf-8-sig')
+            print(f"  每日组合价值：{portfolio_path}")
+        except PermissionError:
+            pass
