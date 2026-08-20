@@ -14,12 +14,13 @@
 
 import pandas as pd
 import numpy as np
+import scipy.stats as stats
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.font_manager import FontProperties
 from datetime import datetime, timedelta
 import os
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 
 # ========================
@@ -67,6 +68,9 @@ class StrategyEvaluator:
         self.decision_log = None
         self.cumulative_returns = None
         self.monthly_returns = None
+        self.daily_portfolio = None
+        self.daily_returns = None
+        self.benchmark_returns = None
 
     def load_data(self):
         """加载回测数据"""
@@ -113,6 +117,16 @@ class StrategyEvaluator:
             self._calculate_cumulative_returns()
             self._calculate_monthly_returns()
 
+        # 加载每日组合价值
+        portfolio_file = os.path.join(self.data_dir, 'daily_portfolio.csv')
+        if os.path.exists(portfolio_file):
+            self.daily_portfolio = pd.read_csv(portfolio_file, encoding='utf-8-sig')
+            print(f"  [OK] 每日组合价值: {len(self.daily_portfolio)}条")
+            self._calculate_daily_returns()
+        else:
+            print(f"  [WARN] 未找到每日组合价值文件: {portfolio_file}")
+            print("  [HINT] 请先运行回测生成 daily_portfolio.csv")
+
     def _calculate_cumulative_returns(self):
         """计算累计收益曲线"""
         if self.daily_pnl.empty:
@@ -157,6 +171,65 @@ class StrategyEvaluator:
         monthly['monthly_return'] = monthly['monthly_profit'] / initial_capital
 
         self.monthly_returns = monthly
+
+    def _calculate_daily_returns(self):
+        """从每日组合价值计算日收益率序列"""
+        if self.daily_portfolio is None or self.daily_portfolio.empty:
+            return
+        df = self.daily_portfolio.copy()
+        df['portfolio_value'] = pd.to_numeric(df['portfolio_value'], errors='coerce')
+        df['daily_return'] = df['portfolio_value'].pct_change()
+        # 去掉第一行（初始资金，pct_change为NaN）
+        self.daily_returns = df[['date', 'daily_return']].dropna().reset_index(drop=True)
+
+    def load_benchmark_data(self):
+        """加载基准（上证指数）日收益率
+
+        先尝试从缓存文件加载，否则从akshare在线获取。
+        """
+        start_date = ''
+        end_date = ''
+        if self.summary is not None and not self.summary.empty:
+            start_date = str(self.summary['start_date'].iloc[0])
+            end_date = str(self.summary['end_date'].iloc[0])
+
+        if not start_date or not end_date:
+            return None
+
+        # 尝试从缓存读取
+        cache_file = os.path.join(self.data_dir, 'benchmark_returns.csv')
+        if os.path.exists(cache_file):
+            try:
+                bm = pd.read_csv(cache_file, encoding='utf-8-sig')
+                print(f"  [OK] 基准数据已缓存: {cache_file} ({len(bm)}条)")
+                self.benchmark_returns = bm
+                return bm
+            except Exception:
+                pass
+
+        # 从akshare获取
+        try:
+            import akshare as ak
+            print("  [INFO] 正在获取上证指数基准数据...")
+            sh_df = ak.stock_zh_index_daily(symbol="sh000001")
+            if sh_df.empty:
+                print("  [WARN] 获取基准数据失败")
+                return None
+            sh_df = sh_df.copy()
+            sh_df['date_str'] = sh_df['date'].astype(str).str.replace('-', '')
+            sh_df = sh_df[(sh_df['date_str'] >= start_date) & (sh_df['date_str'] <= end_date)]
+            if sh_df.empty:
+                print("  [WARN] 基准数据在回测范围内为空")
+                return None
+            sh_df['benchmark_return'] = sh_df['close'].pct_change()
+            result = sh_df[['date_str', 'benchmark_return']].dropna().reset_index(drop=True)
+            result.to_csv(cache_file, index=False, encoding='utf-8-sig')
+            print(f"  [OK] 基准数据已缓存: {cache_file} ({len(result)}条)")
+            self.benchmark_returns = result
+            return result
+        except Exception as e:
+            print(f"  [WARN] 获取基准数据失败: {e}")
+            return None
 
     # ========================
     # 收益率指标
@@ -433,6 +506,261 @@ class StrategyEvaluator:
             metrics['正收益月份占比(%)'] = positive_months / total_months * 100 if total_months > 0 else 0
 
         return metrics
+
+    # ========================
+    # Alpha / Beta / 信息比率
+    # ========================
+
+    def _get_aligned_returns(self) -> Optional[pd.DataFrame]:
+        """对齐策略日收益率和基准日收益率（按日期匹配）"""
+        if self.daily_returns is None or self.daily_returns.empty:
+            print("  [WARN] 无策略日收益率数据，无法计算Alpha等信息")
+            return None
+        if self.benchmark_returns is None or self.benchmark_returns.empty:
+            print("  [WARN] 无基准数据，无法计算Alpha等信息")
+            return None
+
+        strategy = self.daily_returns.copy()
+        strategy['date'] = strategy['date'].astype(str).str.replace('-', '')
+        strategy = strategy.rename(columns={'daily_return': 'strategy_return'})
+
+        benchmark = self.benchmark_returns.copy()
+        benchmark['date'] = benchmark['date_str'].astype(str)
+
+        merged = pd.merge(strategy, benchmark, on='date', how='inner')
+        if merged.empty:
+            print("  [WARN] 策略与基准数据无重叠日期")
+            return None
+        return merged
+
+    def calculate_alpha_beta(self) -> Dict:
+        """计算Alpha、Beta
+
+        Alpha = (R_strategy - Rf) - Beta * (R_benchmark - Rf)
+        Beta = Cov(R_strategy, R_benchmark) / Var(R_benchmark)
+        """
+        merged = self._get_aligned_returns()
+        if merged is None:
+            return {}
+
+        strat_ret = merged['strategy_return'].values
+        bench_ret = merged['benchmark_return'].values
+
+        # 年化无风险利率 → 日化
+        rf_daily = 0.03 / 252
+
+        # Beta
+        cov_mat = np.cov(strat_ret, bench_ret)
+        beta = cov_mat[0, 1] / cov_mat[1, 1] if cov_mat[1, 1] > 0 else 0.0
+
+        # 超额收益（日度）
+        excess_strat = strat_ret - rf_daily
+        excess_bench = bench_ret - rf_daily
+
+        # 年化
+        n = len(strat_ret)
+        annual_strat = (1 + strat_ret.mean()) ** 252 - 1
+        annual_bench = (1 + bench_ret.mean()) ** 252 - 1
+
+        # Alpha
+        alpha = (annual_strat - 0.03) - beta * (annual_bench - 0.03)
+
+        # 跟踪误差（年化）
+        diff = strat_ret - bench_ret
+        tracking_error = diff.std() * np.sqrt(252)
+
+        # 信息比率
+        information_ratio = (diff.mean() * 252) / tracking_error if tracking_error > 0 else 0.0
+
+        return {
+            'Alpha(%)': round(alpha * 100, 4),
+            'Beta': round(beta, 4),
+            '信息比率': round(information_ratio, 4),
+            '跟踪误差(%)': round(tracking_error * 100, 4),
+            '超额收益月化(%)': round(diff.mean() * 21 * 100, 4),
+            '对齐样本数': n,
+        }
+
+    # ========================
+    # CVaR（条件风险价值）
+    # ========================
+
+    def calculate_cvar(self, confidence_level: float = 0.95) -> Dict:
+        """计算CVaR（Conditional Value at Risk）
+
+        在置信水平confidence_level下，超过VaR的尾部损失的期望值。
+        """
+        if self.daily_returns is None or self.daily_returns.empty:
+            return {}
+
+        returns = self.daily_returns['daily_return'].dropna().values
+
+        # VaR at confidence_level
+        var = np.percentile(returns, (1 - confidence_level) * 100)
+
+        # CVaR = 尾部损失的均值
+        cvar = returns[returns <= var].mean()
+
+        return {
+            f'VaR({confidence_level*100:.0f}%)': round(var * 100, 4),
+            f'CVaR({confidence_level*100:.0f}%)': round(cvar * 100, 4),
+            'CVaR样本数': int((returns <= var).sum()),
+        }
+
+    # ========================
+    # 滚动窗口性能
+    # ========================
+
+    def calculate_rolling_metrics(self, window: int = 60) -> Dict:
+        """计算滚动窗口性能指标
+
+        对每个窗口计算：年化收益、年化波动率、夏普比率、最大回撤
+        Args:
+            window: 滚动窗口大小（交易日），默认60天（约3个月）
+        """
+        if self.daily_portfolio is None or self.daily_portfolio.empty:
+            return {}
+
+        values = self.daily_portfolio['portfolio_value'].values
+        if len(values) < window + 1:
+            print(f"  [WARN] 数据长度({len(values)})不足滚动窗口({window})")
+            return {}
+
+        rolling_returns = []
+        rolling_vols = []
+        rolling_sharpes = []
+        rolling_drawdowns = []
+
+        for i in range(window, len(values)):
+            seg = values[i - window:i + 1]
+            seg_returns = np.diff(seg) / seg[:-1]  # 窗口内日收益率
+
+            ann_return = (1 + seg_returns.mean()) ** 252 - 1
+            ann_vol = seg_returns.std() * np.sqrt(252)
+            sharpe = (ann_return - 0.03) / ann_vol if ann_vol > 0 else 0.0
+
+            # 最大回撤
+            peak = np.maximum.accumulate(seg)
+            dd = (seg - peak) / peak
+            max_dd = dd.min()
+
+            rolling_returns.append(ann_return)
+            rolling_vols.append(ann_vol)
+            rolling_sharpes.append(sharpe)
+            rolling_drawdowns.append(max_dd)
+
+        dates = self.daily_portfolio['date'].iloc[window:].values
+
+        result = {
+            '滚动窗口大小': window,
+            '滚动窗口数': len(rolling_returns),
+            '滚动年化收益_均值(%)': round(np.mean(rolling_returns) * 100, 4),
+            '滚动年化收益_标准差(%)': round(np.std(rolling_returns) * 100, 4),
+            '滚动年化波动率_均值(%)': round(np.mean(rolling_vols) * 100, 4),
+            '滚动夏普_均值': round(np.mean(rolling_sharpes), 4),
+            '滚动夏普_标准差': round(np.std(rolling_sharpes), 4),
+            '滚动夏普_胜率(%)': round(np.mean([s > 0 for s in rolling_sharpes]) * 100, 2),
+            '滚动最大回撤_均值(%)': round(np.mean(rolling_drawdowns) * 100, 4),
+            '滚动最大回撤_最小值(%)': round(np.min(rolling_drawdowns) * 100, 4),
+        }
+        return result
+
+    # ========================
+    # 样本外性能
+    # ========================
+
+    def calculate_out_of_sample(self, test_ratio: float = 0.2) -> Dict:
+        """计算样本外性能
+
+        按时间顺序分割：前(1-test_ratio)为样本内，后test_ratio为样本外
+        Args:
+            test_ratio: 样本外比例，默认0.2
+        """
+        if self.daily_portfolio is None or self.daily_portfolio.empty:
+            return {}
+
+        values = self.daily_portfolio['portfolio_value'].values
+        dates = self.daily_portfolio['date'].values
+        n = len(values)
+        split_idx = int(n * (1 - test_ratio))
+
+        if split_idx < 30 or n - split_idx < 30:
+            print(f"  [WARN] 样本内({split_idx})或样本外({n - split_idx})不足30天")
+            return {}
+
+        def _calc_metrics(seg_values, seg_label):
+            seg_returns = np.diff(seg_values) / seg_values[:-1]
+            ann_ret = (1 + seg_returns.mean()) ** 252 - 1
+            ann_vol = seg_returns.std() * np.sqrt(252)
+            sharpe = (ann_ret - 0.03) / ann_vol if ann_vol > 0 else 0.0
+            peak = np.maximum.accumulate(seg_values)
+            dd = (seg_values - peak) / peak
+            max_dd = dd.min()
+            return {
+                f'{seg_label}_年化收益(%)': round(ann_ret * 100, 4),
+                f'{seg_label}_年化波动率(%)': round(ann_vol * 100, 4),
+                f'{seg_label}_夏普比率': round(sharpe, 4),
+                f'{seg_label}_最大回撤(%)': round(max_dd * 100, 4),
+                f'{seg_label}_天数': len(seg_values) - 1,
+            }
+
+        in_sample = values[:split_idx + 1]
+        out_sample = values[split_idx:]
+
+        result = {}
+        result.update(_calc_metrics(in_sample, '样本内'))
+        result.update(_calc_metrics(out_sample, '样本外'))
+        result['样本内结束日期'] = str(dates[split_idx])
+        result['样本外开始日期'] = str(dates[split_idx])
+        result['样本外结束日期'] = str(dates[-1])
+        result['样本外占比'] = f"{test_ratio * 100:.0f}%"
+
+        return result
+
+    # ========================
+    # 策略收益 p-value
+    # ========================
+
+    def calculate_p_value(self) -> Dict:
+        """计算策略收益的p-value
+
+        单样本t检验: H0: 策略日收益率均值 = 0
+        H1: 策略日收益率均值 ≠ 0
+        小p-value (<0.05) 表示策略收益显著不为0
+        """
+        if self.daily_returns is None or self.daily_returns.empty:
+            return {}
+
+        returns = self.daily_returns['daily_return'].dropna().values
+
+        # t检验
+        t_stat, p_value = stats.ttest_1samp(returns, 0)
+
+        # 置信区间 (95%)
+        ci = stats.t.interval(0.95, len(returns) - 1,
+                              loc=returns.mean(),
+                              scale=stats.sem(returns))
+
+        n = len(returns)
+        # 年化收益
+        annual_return = (1 + returns.mean()) ** 252 - 1
+
+        # 正收益日占比
+        win_days = (returns > 0).sum()
+
+        result = {
+            't统计量': round(t_stat, 4),
+            'p-value': round(p_value, 6),
+            '日收益率均值(%)': round(returns.mean() * 100, 4),
+            '日收益率中位数(%)': round(np.median(returns) * 100, 4),
+            '年化收益(%)': round(annual_return * 100, 4),
+            '日收益率95%置信区间下限(%)': round(ci[0] * 100, 4),
+            '日收益率95%置信区间上限(%)': round(ci[1] * 100, 4),
+            '正收益日占比(%)': round(win_days / n * 100, 2),
+            '样本数(交易日)': n,
+            '显著性(α=0.05)': '显著' if p_value < 0.05 else '不显著',
+        }
+        return result
 
     # ========================
     # 空仓统计
@@ -715,9 +1043,13 @@ class StrategyEvaluator:
             print("[ERROR] 未找到回测数据，请先运行回测")
             return {}
 
+        # 加载基准数据
+        self.load_benchmark_data()
+
         # 计算各项指标
         all_metrics = {}
 
+        # ── 收益率指标 ──
         print("\n【收益率指标】")
         print("-" * 80)
         return_metrics = self.calculate_return_metrics()
@@ -728,6 +1060,7 @@ class StrategyEvaluator:
                 print(f"  {key}: {value}")
         all_metrics.update(return_metrics)
 
+        # ── 风险指标（含最大回撤恢复时长、年化波动率） ──
         print("\n【风险指标】")
         print("-" * 80)
         risk_metrics = self.calculate_risk_metrics()
@@ -738,6 +1071,7 @@ class StrategyEvaluator:
                 print(f"  {key}: {value}")
         all_metrics.update(risk_metrics)
 
+        # ── 风险调整收益指标（夏普、索提诺、卡玛） ──
         print("\n【风险调整收益指标】")
         print("-" * 80)
         risk_adjusted_metrics = self.calculate_risk_adjusted_metrics()
@@ -748,6 +1082,40 @@ class StrategyEvaluator:
                 print(f"  {key}: {value}")
         all_metrics.update(risk_adjusted_metrics)
 
+        # ── Alpha / Beta / 信息比率 ──
+        print("\n【Alpha / Beta / 信息比率】")
+        print("-" * 80)
+        alpha_metrics = self.calculate_alpha_beta()
+        for key, value in alpha_metrics.items():
+            if isinstance(value, float):
+                print(f"  {key}: {value:.4f}")
+            else:
+                print(f"  {key}: {value}")
+        all_metrics.update(alpha_metrics)
+
+        # ── CVaR（条件风险价值） ──
+        print("\n【CVaR（条件风险价值）】")
+        print("-" * 80)
+        cvar_metrics = self.calculate_cvar(0.95)
+        for key, value in cvar_metrics.items():
+            if isinstance(value, float):
+                print(f"  {key}: {value:.4f}%")
+            else:
+                print(f"  {key}: {value}")
+        all_metrics.update(cvar_metrics)
+
+        # ── 策略收益 p-value ──
+        print("\n【策略收益显著性检验】")
+        print("-" * 80)
+        pvalue_metrics = self.calculate_p_value()
+        for key, value in pvalue_metrics.items():
+            if isinstance(value, float):
+                print(f"  {key}: {value:.4f}")
+            else:
+                print(f"  {key}: {value}")
+        all_metrics.update(pvalue_metrics)
+
+        # ── 交易统计指标 ──
         print("\n【交易统计指标】")
         print("-" * 80)
         trading_metrics = self.calculate_trading_metrics()
@@ -758,6 +1126,7 @@ class StrategyEvaluator:
                 print(f"  {key}: {value}")
         all_metrics.update(trading_metrics)
 
+        # ── 其他指标 ──
         print("\n【其他指标】")
         print("-" * 80)
         other_metrics = self.calculate_other_metrics()
@@ -768,7 +1137,33 @@ class StrategyEvaluator:
                 print(f"  {key}: {value}")
         all_metrics.update(other_metrics)
 
-        # 空仓统计
+        # ── 滚动窗口性能 ──
+        print("\n" + "=" * 80)
+        print("滚动窗口性能（60日滚动）")
+        print("=" * 80)
+        rolling_metrics = self.calculate_rolling_metrics(window=60)
+        for key, value in rolling_metrics.items():
+            if isinstance(value, float):
+                print(f"  {key}: {value:.4f}")
+            else:
+                print(f"  {key}: {value}")
+        if rolling_metrics:
+            all_metrics['滚动窗口性能'] = rolling_metrics
+
+        # ── 样本外性能 ──
+        print("\n" + "=" * 80)
+        print("样本外性能（80/20分割）")
+        print("=" * 80)
+        oos_metrics = self.calculate_out_of_sample(test_ratio=0.2)
+        for key, value in oos_metrics.items():
+            if isinstance(value, float):
+                print(f"  {key}: {value:.4f}")
+            else:
+                print(f"  {key}: {value}")
+        if oos_metrics:
+            all_metrics['样本外性能'] = oos_metrics
+
+        # ── 空仓统计 ──
         print("\n" + "=" * 80)
         print("空仓统计")
         print("=" * 80)
@@ -777,7 +1172,7 @@ class StrategyEvaluator:
         if idle_metrics:
             all_metrics['空仓统计'] = idle_metrics
 
-        # 亏损归因分析
+        # ── 亏损归因分析 ──
         print("\n" + "=" * 80)
         print("亏损归因分析")
         print("=" * 80)

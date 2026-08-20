@@ -7,56 +7,7 @@
     "break_days": 0,
     "peak_price": 0.0
   },
-  "current_phase": "低位试错期",
-  "dragon_candidates": [
-    {
-      "code": "603395",
-      "name": "红四方",
-      "sector": "国企改革",
-      "price": 26.36,
-      "streak": 2,
-      "is_high_board": false
-    },
-    {
-      "code": "600127",
-      "name": "金健米业",
-      "sector": "国企改革",
-      "price": 7.11,
-      "streak": 2,
-      "is_high_board": false
-    },
-    {
-      "code": "600313",
-      "name": "农发种业",
-      "sector": "国企改革",
-      "price": 6.78,
-      "streak": 2,
-      "is_high_board": false
-    },
-    {
-      "code": "000505",
-      "name": "京粮控股",
-      "sector": "国企改革",
-      "price": 6.79,
-      "streak": 2,
-      "is_high_board": false
-    },
-    {
-      "code": "603936",
-      "name": "博敏电子",
-      "sector": "新能源汽车",
-      "price": 19.12,
-      "streak": 2,
-      "is_high_board": false
-    },
-    {
-      "code": "000735",
-      "name": "罗 牛 山",
-      "sector": "乡村振兴",
-      "price": 6.18,
-      "streak": 2,
-      "is_high_board": false
-    }
-  ],
-  "last_update": "20260819"
+  "current_phase": "退潮期",
+  "dragon_candidates": [],
+  "last_update": "20260820"
 }
