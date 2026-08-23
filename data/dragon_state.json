@@ -8,31 +8,6 @@
     "peak_price": 0.0
   },
   "current_phase": "低位试错期",
-  "dragon_candidates": [
-    {
-      "code": "603958",
-      "name": "哈森股份",
-      "sector": "华为概念",
-      "price": 20.55,
-      "streak": 2,
-      "is_high_board": false
-    },
-    {
-      "code": "603626",
-      "name": "科森科技",
-      "sector": "华为概念",
-      "price": 18.65,
-      "streak": 2,
-      "is_high_board": false
-    },
-    {
-      "code": "002491",
-      "name": "通鼎互联",
-      "sector": "储能",
-      "price": 21.2,
-      "streak": 2,
-      "is_high_board": false
-    }
-  ],
-  "last_update": "20260821"
+  "dragon_candidates": [],
+  "last_update": "20260823"
 }
