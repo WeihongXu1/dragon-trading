@@ -8,6 +8,47 @@
     "peak_price": 0.0
   },
   "current_phase": "低位试错期",
-  "dragon_candidates": [],
-  "last_update": "20260826"
+  "dragon_candidates": [
+    {
+      "code": "600103",
+      "name": "青山纸业",
+      "sector": "国企改革",
+      "price": 3.47,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "002418",
+      "name": "康盛股份",
+      "sector": "储能",
+      "price": 4.46,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "002963",
+      "name": "豪尔赛",
+      "sector": "储能",
+      "price": 22.35,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "002949",
+      "name": "华阳国际",
+      "sector": "一带一路",
+      "price": 13.68,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "002094",
+      "name": "青岛金王",
+      "sector": "一带一路",
+      "price": 5.65,
+      "streak": 2,
+      "is_high_board": false
+    }
+  ],
+  "last_update": "20260827"
 }
