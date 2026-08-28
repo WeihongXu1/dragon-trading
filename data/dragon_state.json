@@ -8,6 +8,31 @@
     "peak_price": 0.0
   },
   "current_phase": "低位试错期",
-  "dragon_candidates": [],
-  "last_update": "20260827"
+  "dragon_candidates": [
+    {
+      "code": "600479",
+      "name": "千金药业",
+      "sector": "国企改革",
+      "price": 12.12,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "600969",
+      "name": "郴电国际",
+      "sector": "国企改革",
+      "price": 10.45,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "600095",
+      "name": "湘财股份",
+      "sector": "2026中报预增",
+      "price": 9.54,
+      "streak": 2,
+      "is_high_board": false
+    }
+  ],
+  "last_update": "20260828"
 }
