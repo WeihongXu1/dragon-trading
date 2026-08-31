@@ -8,23 +8,6 @@
     "peak_price": 0.0
   },
   "current_phase": "低位试错期",
-  "dragon_candidates": [
-    {
-      "code": "600654",
-      "name": "中安科",
-      "sector": "人工智能",
-      "price": 3.63,
-      "streak": 2,
-      "is_high_board": false
-    },
-    {
-      "code": "603011",
-      "name": "合锻智能",
-      "sector": "人工智能",
-      "price": 27.65,
-      "streak": 2,
-      "is_high_board": false
-    }
-  ],
-  "last_update": "20260829"
+  "dragon_candidates": [],
+  "last_update": "20260831"
 }
