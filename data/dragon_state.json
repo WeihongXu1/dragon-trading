@@ -8,47 +8,6 @@
     "peak_price": 0.0
   },
   "current_phase": "低位试错期",
-  "dragon_candidates": [
-    {
-      "code": "600691",
-      "name": "潞化科技",
-      "sector": "机器人概念",
-      "price": 3.23,
-      "streak": 2,
-      "is_high_board": false
-    },
-    {
-      "code": "600722",
-      "name": "金牛化工",
-      "sector": "国企改革",
-      "price": 16.8,
-      "streak": 2,
-      "is_high_board": false
-    },
-    {
-      "code": "600551",
-      "name": "时代出版",
-      "sector": "国企改革",
-      "price": 8.25,
-      "streak": 2,
-      "is_high_board": false
-    },
-    {
-      "code": "003005",
-      "name": "竞业达",
-      "sector": "芯片概念",
-      "price": 16.53,
-      "streak": 2,
-      "is_high_board": false
-    },
-    {
-      "code": "603559",
-      "name": "中通国脉",
-      "sector": "东数西算(算力)",
-      "price": 10.54,
-      "streak": 2,
-      "is_high_board": false
-    }
-  ],
-  "last_update": "20260901"
+  "dragon_candidates": [],
+  "last_update": "20260902"
 }
