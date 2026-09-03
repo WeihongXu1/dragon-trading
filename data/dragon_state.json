@@ -7,24 +7,7 @@
     "break_days": 0,
     "peak_price": 0.0
   },
-  "current_phase": "低位试错期",
-  "dragon_candidates": [
-    {
-      "code": "600830",
-      "name": "香溢融通",
-      "sector": "国企改革",
-      "price": 10.15,
-      "streak": 2,
-      "is_high_board": false
-    },
-    {
-      "code": "002104",
-      "name": "恒宝股份",
-      "sector": "芯片概念",
-      "price": 13.51,
-      "streak": 2,
-      "is_high_board": false
-    }
-  ],
+  "current_phase": "退潮期",
+  "dragon_candidates": [],
   "last_update": "20260903"
 }
