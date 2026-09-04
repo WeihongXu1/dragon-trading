@@ -7,7 +7,24 @@
     "break_days": 0,
     "peak_price": 0.0
   },
-  "current_phase": "退潮期",
-  "dragon_candidates": [],
+  "current_phase": "低位试错期",
+  "dragon_candidates": [
+    {
+      "code": "600108",
+      "name": "亚盛集团",
+      "sector": "国企改革",
+      "price": 4.36,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "603162",
+      "name": "海通发展",
+      "sector": "海峡两岸",
+      "price": 14.64,
+      "streak": 2,
+      "is_high_board": false
+    }
+  ],
   "last_update": "20260904"
 }
