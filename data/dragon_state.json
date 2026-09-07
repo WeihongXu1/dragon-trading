@@ -8,6 +8,39 @@
     "peak_price": 0.0
   },
   "current_phase": "低位试错期",
-  "dragon_candidates": [],
-  "last_update": "20260906"
+  "dragon_candidates": [
+    {
+      "code": "600354",
+      "name": "敦煌种业",
+      "sector": "国企改革",
+      "price": 9.53,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "000798",
+      "name": "中水渔业",
+      "sector": "国企改革",
+      "price": 11.15,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "000428",
+      "name": "华天酒店",
+      "sector": "国企改革",
+      "price": 5.16,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "601949",
+      "name": "中国出版",
+      "sector": "国企改革",
+      "price": 6.41,
+      "streak": 2,
+      "is_high_board": false
+    }
+  ],
+  "last_update": "20260907"
 }
