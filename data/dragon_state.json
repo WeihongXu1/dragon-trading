@@ -8,6 +8,39 @@
     "peak_price": 0.0
   },
   "current_phase": "低位试错期",
-  "dragon_candidates": [],
-  "last_update": "20260909"
+  "dragon_candidates": [
+    {
+      "code": "600359",
+      "name": "新农开发",
+      "sector": "国企改革",
+      "price": 9.64,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "600192",
+      "name": "长城电工",
+      "sector": "国企改革",
+      "price": 8.68,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "000993",
+      "name": "闽东电力",
+      "sector": "国企改革",
+      "price": 12.62,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "000565",
+      "name": "渝三峡Ａ",
+      "sector": "国企改革",
+      "price": 7.91,
+      "streak": 2,
+      "is_high_board": false
+    }
+  ],
+  "last_update": "20260910"
 }
