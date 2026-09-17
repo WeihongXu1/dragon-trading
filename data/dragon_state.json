@@ -7,7 +7,24 @@
     "break_days": 0,
     "peak_price": 0.0
   },
-  "current_phase": "退潮期",
-  "dragon_candidates": [],
-  "last_update": "20260915"
+  "current_phase": "低位试错期",
+  "dragon_candidates": [
+    {
+      "code": "002584",
+      "name": "西陇科学",
+      "sector": "芯片概念",
+      "price": 9.55,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "002846",
+      "name": "英联股份",
+      "sector": "新能源汽车",
+      "price": 12.75,
+      "streak": 2,
+      "is_high_board": false
+    }
+  ],
+  "last_update": "20260917"
 }
