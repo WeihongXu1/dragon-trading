@@ -8,6 +8,55 @@
     "peak_price": 0.0
   },
   "current_phase": "低位试错期",
-  "dragon_candidates": [],
-  "last_update": "20260917"
+  "dragon_candidates": [
+    {
+      "code": "600448",
+      "name": "华纺股份",
+      "sector": "国企改革",
+      "price": 3.54,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "000504",
+      "name": "南华生物",
+      "sector": "国企改革",
+      "price": 10.01,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "600630",
+      "name": "龙头股份",
+      "sector": "国企改革",
+      "price": 8.29,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "600127",
+      "name": "金健米业",
+      "sector": "国企改革",
+      "price": 14.32,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "002453",
+      "name": "华软科技",
+      "sector": "芯片概念",
+      "price": 5.34,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "603626",
+      "name": "科森科技",
+      "sector": "华为概念",
+      "price": 23.42,
+      "streak": 2,
+      "is_high_board": false
+    }
+  ],
+  "last_update": "20260918"
 }
