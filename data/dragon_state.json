@@ -7,40 +7,7 @@
     "break_days": 0,
     "peak_price": 0.0
   },
-  "current_phase": "低位试错期",
-  "dragon_candidates": [
-    {
-      "code": "603001",
-      "name": "奥康国际",
-      "sector": "服装家纺",
-      "price": 11.47,
-      "streak": 2,
-      "is_high_board": false
-    },
-    {
-      "code": "601086",
-      "name": "国芳集团",
-      "sector": "一般零售",
-      "price": 17.67,
-      "streak": 2,
-      "is_high_board": false
-    },
-    {
-      "code": "000910",
-      "name": "大亚圣象",
-      "sector": "家居用品",
-      "price": 6.26,
-      "streak": 2,
-      "is_high_board": false
-    },
-    {
-      "code": "601811",
-      "name": "新华文轩",
-      "sector": "出版",
-      "price": 15.29,
-      "streak": 2,
-      "is_high_board": false
-    }
-  ],
-  "last_update": "20260922"
+  "current_phase": "退潮期",
+  "dragon_candidates": [],
+  "last_update": "20260925"
 }
