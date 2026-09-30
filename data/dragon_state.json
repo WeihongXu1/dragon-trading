@@ -7,7 +7,32 @@
     "break_days": 0,
     "peak_price": 0.0
   },
-  "current_phase": "退潮期",
-  "dragon_candidates": [],
-  "last_update": "20260929"
+  "current_phase": "低位试错期",
+  "dragon_candidates": [
+    {
+      "code": "000011",
+      "name": "深物业A",
+      "sector": "国企改革",
+      "price": 11.13,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "600241",
+      "name": "时代万恒",
+      "sector": "国企改革",
+      "price": 8.84,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "002912",
+      "name": "中新赛克",
+      "sector": "华为概念",
+      "price": 29.12,
+      "streak": 2,
+      "is_high_board": false
+    }
+  ],
+  "last_update": "20260930"
 }
