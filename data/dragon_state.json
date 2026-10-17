@@ -7,7 +7,24 @@
     "break_days": 0,
     "peak_price": 0.0
   },
-  "current_phase": "退潮期",
-  "dragon_candidates": [],
-  "last_update": "20261016"
+  "current_phase": "低位试错期",
+  "dragon_candidates": [
+    {
+      "code": "600668",
+      "name": "尖峰集团",
+      "sector": "国企改革",
+      "price": 8.79,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "003029",
+      "name": "吉大正元",
+      "sector": "低空经济",
+      "price": 21.99,
+      "streak": 2,
+      "is_high_board": false
+    }
+  ],
+  "last_update": "20261017"
 }
