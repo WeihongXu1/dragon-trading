@@ -8,15 +8,6 @@
     "peak_price": 0.0
   },
   "current_phase": "低位试错期",
-  "dragon_candidates": [
-    {
-      "code": "002164",
-      "name": "宁波东力",
-      "sector": "通用设备",
-      "price": 16.16,
-      "streak": 2,
-      "is_high_board": false
-    }
-  ],
-  "last_update": "20261021"
+  "dragon_candidates": [],
+  "last_update": "20261022"
 }
