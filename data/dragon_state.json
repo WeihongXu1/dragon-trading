@@ -8,39 +8,6 @@
     "peak_price": 0.0
   },
   "current_phase": "低位试错期",
-  "dragon_candidates": [
-    {
-      "code": "603089",
-      "name": "正裕工业",
-      "sector": "机器人概念",
-      "price": 11.89,
-      "streak": 2,
-      "is_high_board": false
-    },
-    {
-      "code": "000678",
-      "name": "襄阳轴承",
-      "sector": "机器人概念",
-      "price": 13.23,
-      "streak": 2,
-      "is_high_board": false
-    },
-    {
-      "code": "603528",
-      "name": "多伦科技",
-      "sector": "机器人概念",
-      "price": 8.14,
-      "streak": 2,
-      "is_high_board": false
-    },
-    {
-      "code": "002535",
-      "name": "林州重机",
-      "sector": "储能",
-      "price": 3.03,
-      "streak": 2,
-      "is_high_board": false
-    }
-  ],
-  "last_update": "20261024"
+  "dragon_candidates": [],
+  "last_update": "20261025"
 }
