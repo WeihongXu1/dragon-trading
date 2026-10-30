@@ -7,24 +7,7 @@
     "break_days": 0,
     "peak_price": 0.0
   },
-  "current_phase": "低位试错期",
-  "dragon_candidates": [
-    {
-      "code": "601956",
-      "name": "东贝集团",
-      "sector": "机器人概念",
-      "price": 6.09,
-      "streak": 2,
-      "is_high_board": false
-    },
-    {
-      "code": "603037",
-      "name": "凯众股份",
-      "sector": "机器人概念",
-      "price": 13.06,
-      "streak": 2,
-      "is_high_board": false
-    }
-  ],
-  "last_update": "20261029"
+  "current_phase": "退潮期",
+  "dragon_candidates": [],
+  "last_update": "20261030"
 }
