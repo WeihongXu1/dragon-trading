@@ -7,7 +7,24 @@
     "break_days": 0,
     "peak_price": 0.0
   },
-  "current_phase": "退潮期",
-  "dragon_candidates": [],
-  "last_update": "20261102"
+  "current_phase": "低位试错期",
+  "dragon_candidates": [
+    {
+      "code": "000417",
+      "name": "合百集团",
+      "sector": "一般零售",
+      "price": 6.27,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "000995",
+      "name": "皇台酒业",
+      "sector": "白酒Ⅱ",
+      "price": 15.6,
+      "streak": 2,
+      "is_high_board": false
+    }
+  ],
+  "last_update": "20261103"
 }
