@@ -7,24 +7,7 @@
     "break_days": 0,
     "peak_price": 0.0
   },
-  "current_phase": "低位试错期",
-  "dragon_candidates": [
-    {
-      "code": "002388",
-      "name": "新亚制程",
-      "sector": "光伏概念",
-      "price": 6.06,
-      "streak": 2,
-      "is_high_board": false
-    },
-    {
-      "code": "002309",
-      "name": "中利集团",
-      "sector": "光伏概念",
-      "price": 2.92,
-      "streak": 2,
-      "is_high_board": false
-    }
-  ],
-  "last_update": "20261106"
+  "current_phase": "退潮期",
+  "dragon_candidates": [],
+  "last_update": "20261107"
 }
