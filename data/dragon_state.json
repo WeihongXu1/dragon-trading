@@ -7,7 +7,32 @@
     "break_days": 0,
     "peak_price": 0.0
   },
-  "current_phase": "退潮期",
-  "dragon_candidates": [],
-  "last_update": "20261109"
+  "current_phase": "低位试错期",
+  "dragon_candidates": [
+    {
+      "code": "601188",
+      "name": "龙江交通",
+      "sector": "国企改革",
+      "price": 4.19,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "600278",
+      "name": "东方创业",
+      "sector": "国企改革",
+      "price": 7.83,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "000525",
+      "name": "红太阳",
+      "sector": "国企改革",
+      "price": 5.52,
+      "streak": 2,
+      "is_high_board": false
+    }
+  ],
+  "last_update": "20261110"
 }
