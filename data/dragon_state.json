@@ -8,6 +8,31 @@
     "peak_price": 0.0
   },
   "current_phase": "低位试错期",
-  "dragon_candidates": [],
-  "last_update": "20261112"
+  "dragon_candidates": [
+    {
+      "code": "603725",
+      "name": "天安新材",
+      "sector": "一带一路",
+      "price": 13.16,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "002593",
+      "name": "日上集团",
+      "sector": "一带一路",
+      "price": 5.23,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "002148",
+      "name": "北纬科技",
+      "sector": "机器人概念",
+      "price": 7.23,
+      "streak": 2,
+      "is_high_board": false
+    }
+  ],
+  "last_update": "20261113"
 }
