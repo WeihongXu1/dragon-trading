@@ -7,7 +7,56 @@
     "break_days": 0,
     "peak_price": 0.0
   },
-  "current_phase": "退潮期",
-  "dragon_candidates": [],
-  "last_update": "20261123"
+  "current_phase": "低位试错期",
+  "dragon_candidates": [
+    {
+      "code": "000530",
+      "name": "冰山冷热",
+      "sector": "通用设备",
+      "price": 13.52,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "002199",
+      "name": "东晶电子",
+      "sector": "元件",
+      "price": 10.4,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "600327",
+      "name": "大东方",
+      "sector": "一般零售",
+      "price": 5.31,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "002548",
+      "name": "金新农",
+      "sector": "饲料",
+      "price": 4.14,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "603004",
+      "name": "鼎龙科技",
+      "sector": "化学制品",
+      "price": 20.04,
+      "streak": 2,
+      "is_high_board": false
+    },
+    {
+      "code": "002642",
+      "name": "荣联科技",
+      "sector": "IT服务Ⅱ",
+      "price": 7.99,
+      "streak": 2,
+      "is_high_board": false
+    }
+  ],
+  "last_update": "20261124"
 }
