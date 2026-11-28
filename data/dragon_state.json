@@ -8,39 +8,6 @@
     "peak_price": 0.0
   },
   "current_phase": "低位试错期",
-  "dragon_candidates": [
-    {
-      "code": "600229",
-      "name": "城市传媒",
-      "sector": "国企改革",
-      "price": 5.95,
-      "streak": 2,
-      "is_high_board": false
-    },
-    {
-      "code": "600103",
-      "name": "青山纸业",
-      "sector": "国企改革",
-      "price": 4.16,
-      "streak": 2,
-      "is_high_board": false
-    },
-    {
-      "code": "002197",
-      "name": "证通电子",
-      "sector": "人工智能",
-      "price": 7.05,
-      "streak": 2,
-      "is_high_board": false
-    },
-    {
-      "code": "002144",
-      "name": "宏达高科",
-      "sector": "机器人概念",
-      "price": 9.99,
-      "streak": 2,
-      "is_high_board": false
-    }
-  ],
-  "last_update": "20261127"
+  "dragon_candidates": [],
+  "last_update": "20261128"
 }
